@@ -4,10 +4,15 @@ FROM node:22
 
 ARG TZ=America/New_York
 ENV TZ="$TZ"
-# Pinned; bump on purpose, with the changelog read. 2.1.287 was the image's version on 2026-10-02; 2.1.288 on 2026-10-03; 2.1.289 on 2026-10-05, changelog read.
-ARG CLAUDE_CODE_VERSION=2.1.289
-# Pinned the same way; 0.62.0 audited 2026-10-02 (clean, Apache-2.0, one bundle, no runtime dependencies).
-ARG GEMINI_CLI_VERSION=0.62.0
+# Pinned; bump on purpose, with the changelog read. 2.1.287 was the image's version on 2026-10-02; 2.1.288 on 2026-10-03; 2.1.289 on 2026-10-05, changelog read;
+# 2.1.296 on 2026-10-11 (the bump cocoon-ai took on 2026-10-10 in its PR #73, changelog 2.1.290 to 2.1.296 read there; the split of
+# 2026-10-11 copied the older pin; GitHub's advisory database lists 28 advisories for @anthropic-ai/claude-code, every one patched at or
+# before 2.1.163, none affecting 2.1.296; npm's latest tag is 2.1.296, published 2026-10-10).
+ARG CLAUDE_CODE_VERSION=2.1.296
+# Pinned the same way; 0.62.0 audited 2026-10-02 (clean, Apache-2.0, one bundle, no runtime dependencies);
+# 0.63.0 on 2026-10-11 (cocoon-ai's PR #73 of 2026-10-10: release notes read there, fixes only; the one advisory in GitHub's database,
+# GHSA-wpqr-6v78-jr5g, affects versions below 0.39.1; npm's latest tag is 0.63.0, published 2026-10-06, 5 days old).
+ARG GEMINI_CLI_VERSION=0.63.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates curl git gh jq less nano procps sudo \
