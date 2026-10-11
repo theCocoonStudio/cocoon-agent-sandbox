@@ -1,30 +1,34 @@
 #!/bin/bash
-# The host-side launcher. Install ONCE, by hand, outside any repo:
+# The host-side launcher. Install ONCE, by hand, outside any repo: the launcher, then the
+# configuration file beside your own dotfiles, copied from the example and filled in:
 #
 #   curl -fsSL https://raw.githubusercontent.com/theCocoonStudio/cocoon-agent-sandbox/main/host/cocoon-launch.sh -o ~/bin/cocoon && chmod 755 ~/bin/cocoon
+#   mkdir -p ~/.config/cocoon && curl -fsSL https://raw.githubusercontent.com/theCocoonStudio/cocoon-agent-sandbox/main/examples/cocoon-ai.json -o ~/.config/cocoon/sandbox.json
 #
 # then start sessions with `cocoon claude` or `cocoon gemini`; `cocoon --dry` downloads
 # and checks without starting anything. The host keeps no clone of any repo and the
-# login user has no git: there is nothing of the agent's on the host to execute.
+# login user has no git: there is nothing of the agent's on the host to execute, and
+# nothing of any repository either, not even for the configuration (the owner,
+# 2026-10-11: no git on the host, so no repository there, not even the first time).
 #
 # Why this file exists: run.sh builds the image from sandbox/ and runs on the host as
 # your user. When the host built from a working tree the agent writes, a restart executed
 # unreviewed scripts twice (2026-09-03 and 2026-10-02; the owner's private records). This
-# launcher downloads two reviewed things from GitHub as tarballs over HTTPS, both behind
-# a ruleset with a required review: the consuming repository's main, for its configuration
-# file, and this library at the ref that configuration pins, for the sandbox; it unpacks
-# only what it runs and runs THAT run.sh with THAT configuration. The agent's workspace
-# is a container volume the host never reads.
+# launcher downloads ONE reviewed thing from GitHub as a tarball over HTTPS, behind a
+# ruleset with a required review: this library at the ref the host's configuration pins;
+# it unpacks only what it runs and runs THAT run.sh with the host's configuration. The
+# agent's workspace is a container volume the host never reads.
 #
 # Nothing here is configurable from the environment, on purpose: a change to what runs
-# goes through a PR, not through a variable the host happens to have set. The installed
-# copy is what runs; the copy on main is its reviewed source. When the two differ the
-# launcher says so, and you decide whether to reinstall.
+# goes through a PR to this library, or through the one file on the host that you edit
+# by hand and the validator checks before anything runs; never through a variable the
+# host happens to have set. The installed copy is what runs; the copy on main is its
+# reviewed source. When the two differ the launcher says so, and you decide whether to
+# reinstall.
 set -euo pipefail
 
 # --- Everything this script knows, in one place ---------------------------------------------
-CONSUMER=theCocoonStudio/cocoon-ai    # the repository whose configuration is run, from its main
-CONFIG_PATH=cocoon-sandbox.json       # the configuration file's path in that repository
+CONFIG=~/.config/cocoon/sandbox.json  # the host's configuration, placed by hand; the only input
 API=https://api.github.com/repos
 # Tools, and what each is for. run.sh adds openssl (the App JWT) and podman; it checks its own.
 TOOLS=(
@@ -43,6 +47,8 @@ done
 DRY=0
 if [ "${1:-}" = "--dry" ]; then DRY=1; shift; fi
 
+[ -r "$CONFIG" ] || { echo "launcher: no configuration at $CONFIG; copy examples/cocoon-ai.json from the sandbox repository there and fill it in" >&2; exit 1; }
+
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
@@ -59,10 +65,10 @@ fetch() { # fetch <owner/repo> <ref> <path within the repo> -> prints <dir of th
   printf '%s' "$tmp/$top/$path"
 }
 
-config=$(fetch "$CONSUMER" main "$CONFIG_PATH")
+config=$CONFIG
 sandbox_repo=$(jq -r '.sandbox.repo' "$config")
 sandbox_ref=$(jq -r '.sandbox.ref' "$config")
-[ -n "$sandbox_repo" ] && [ "$sandbox_repo" != null ] && [ -n "$sandbox_ref" ] && [ "$sandbox_ref" != null ] || { echo "launcher: $CONFIG_PATH names no sandbox.repo and sandbox.ref" >&2; exit 1; }
+[ -n "$sandbox_repo" ] && [ "$sandbox_repo" != null ] && [ -n "$sandbox_ref" ] && [ "$sandbox_ref" != null ] || { echo "launcher: $CONFIG names no sandbox.repo and sandbox.ref" >&2; exit 1; }
 dc=$(fetch "$sandbox_repo" "$sandbox_ref" sandbox)
 host=$(fetch "$sandbox_repo" "$sandbox_ref" host)
 
@@ -73,7 +79,7 @@ if ! cmp -s "$host/cocoon-launch.sh" "$(readlink -f "$0")"; then
   echo "launcher: NOTE this installed launcher differs from $sandbox_ref's copy; reinstall it after reviewing the diff" >&2
 fi
 
-echo "launcher: running $sandbox_repo@$sandbox_ref's sandbox with $CONSUMER's $CONFIG_PATH"
+echo "launcher: running $sandbox_repo@$sandbox_ref's sandbox with $config"
 if [ "$DRY" = 1 ]; then ls "$dc"; exec bash "$dc/run.sh" --dry "$config" "$@"; fi
 
 exec bash "$dc/run.sh" "$config" "$@"

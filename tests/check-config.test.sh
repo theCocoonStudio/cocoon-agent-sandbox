@@ -20,5 +20,6 @@ echo "not json" > "$T/bad.json"; expect fail "$T/bad.json" "not valid JSON"
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude -- --research 2>&1); grep -q 'agent claude as cocoon-claude\[bot\] <324573615+cocoon-claude\[bot\]@users.noreply.github.com>, App 4819921' <<< "$out" && grep -q 'chosen: --config research' <<< "$out" || { echo "FAIL: run.sh --dry claude: $out"; fail=1; }
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json gemini 2>&1); grep -q 'agent gemini as cocoon-gemini\[bot\]' <<< "$out" && grep -q 'cocoon-ai-gemini-config:/home/node/.gemini' <<< "$out" || { echo "FAIL: run.sh --dry gemini: $out"; fail=1; }
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude -- --nope 2>&1); grep -q "unknown profile '--nope'" <<< "$out" || { echo "FAIL: run.sh --dry unknown profile: $out"; fail=1; }
+out=$(HOME="$T" bash host/cocoon-launch.sh --dry 2>&1); grep -q "no configuration at $T/.config/cocoon/sandbox.json" <<< "$out" || { echo "FAIL: launcher without a configuration: $out"; fail=1; }
 for f in sandbox/*.sh host/*.sh hooks/*.sh tests/*.sh; do bash -n "$f" || { echo "FAIL: syntax: $f"; fail=1; }; done
 [ $fail -eq 0 ] && echo "check-config tests: all pass"; exit $fail
