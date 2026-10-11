@@ -1,7 +1,7 @@
 #!/bin/bash
 # The configuration contract, tested with jq alone: the example passes; an unknown key, a missing
 # key, a wrong version and a bad profile name are refused, each naming the problem.
-set -u
+set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 C=sandbox/check-config.sh; T=$(mktemp -d); trap 'rm -rf "${T:?}"' EXIT; fail=0
 expect() { # expect <pass|fail> <file> <needle>
