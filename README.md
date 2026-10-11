@@ -39,6 +39,12 @@ The launcher downloads the consuming repository's `main` for the file and this l
 
 The hosts lists stay files under `sandbox/configs/` for now, one per agent and per profile, baked into the image; moving them into the configuration is the next step, together with the gateway described under Next.
 
+## What checks what
+
+- **`check`** (`.github/workflows/check.yml`), on every pull request and on `main`: the configuration contract's tests and every script's syntax, and, as the second job `image`, the image built from `sandbox/` as `run.sh` builds it, then the entrypoint started in it with the firewall's two capabilities so the firewall's self-test decides: an ordinary public site unreachable, the gateway deaf on UDP 53, GitHub reachable. Made required statuses in the main ruleset, the check passes is a fact on the PR page.
+- **`reviewer-policy`** (`.github/workflows/reviewer-policy.yml`): who may approve whose PR, as a status rather than a habit. The owner's PRs need the agent's approval; the agent's need the owner's; a second agent's approval satisfies nobody's. The file is code-owned, so a PR cannot rewrite the policy that judges it.
+- **`dependency-check`** (`.github/workflows/dependency-check.yml`), weekly and on demand: each pinned CLI against GitHub's advisory database and the registry's newest release, red on an advisory against a pin. The owner's rule for every deployed repository; the hook does the same at session start for the agent.
+
 ## The protocol
 
 The rules the files follow, each learned the hard way:
@@ -60,9 +66,8 @@ Stated because an allowlist that cannot name them is a false comfort.
 
 ## Next
 
-- **This repository's own CI** building the image and running the validator's tests and the firewall's self-checks, once Actions can be added; the hosts lists into the configuration.
-- **A dependency check on a schedule** for every deployed repository: the lockfile against the advisory databases, by CVSS score, reported before anyone asks.
-- **A gateway.** One host in the wall instead of a list: the owner's own API gateway, one subdomain per upstream, the GitHub API wrapped with a policy table that refuses what the rules forbid, a client certificate to get in and a token for access, and no credential of any kind inside the container. The wall then shrinks to one address and the token's hour disappears.
+- **The hosts lists into the configuration**, so the whole wall is one reviewed file; the image's self-check run on the runner against the sandbox's own network rules, not only the firewall's self-test.
+- **A gateway.** One host in the wall instead of a list: the owner's own API gateway, one subdomain per upstream, the GitHub API wrapped with a policy table that refuses what the rules forbid, a client certificate to get in and a token for access, and no credential of any kind inside the container. The wall then shrinks to one address and the token's hour disappears. Its repository is [cocoon-gateway](https://github.com/theCocoonStudio/cocoon-gateway).
 
 ## License
 
