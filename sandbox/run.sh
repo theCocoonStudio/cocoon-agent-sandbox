@@ -7,8 +7,8 @@
 # `cocoon claude -- --research`: flags before `--` go to the agent, after it name the profiles
 # (hosts lists) turned on for this one session.
 #
-# The configuration file is the consuming repository's, reviewed there by pull request; the
-# launcher downloads it from that repository's main and hands it here. Everything this script
+# The configuration file lives on the host, ~/.config/cocoon/sandbox.json, placed and edited by
+# hand like the launcher, never inside a repository; the launcher reads it and hands it here. Everything this script
 # knows comes from that file; nothing is read from the environment. check-config.sh refuses a
 # file with a key nobody reads.
 #
