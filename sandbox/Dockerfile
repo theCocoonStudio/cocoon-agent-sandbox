@@ -14,13 +14,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   iptables ipset iproute2 dnsutils aggregate \
   chromium \
   python3-numpy \
-  shellcheck \
+  shellcheck python3-pyflakes \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 # chromium: the headless browser `npm run export:logo-group` screenshots its
 # WebGL render with (SwiftShader, no GPU), driven by puppeteer-core from npm.
 # Nothing else in the sandbox uses it.
 # shellcheck: the shell linter, so the agent lints every script before it is committed
 # (tests/lint.sh) and every Bash command before it runs; from Debian, no third-party check.
+# python3-pyflakes: the Python linter for cocoon-ml (undefined names, unused imports: the
+# errors Python raises only when the path runs, hours into a cell); Debian's 2.5.0, the
+# version cocoon-ml's CI pins, so the agent and the runner agree.
 # python3-numpy: Debian's numpy, for cocoon-ml's in-context apparatus at the
 # derived model size (a cell takes hours on the scalar autograd and minutes on
 # arrays). From Debian, not PyPI, so no new host and no third-party check under
