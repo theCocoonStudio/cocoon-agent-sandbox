@@ -2,7 +2,7 @@
 # The configuration contract, tested with jq alone: the example passes; an unknown key, a missing
 # key, a wrong version and a bad profile name are refused, each naming the problem.
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 C=sandbox/check-config.sh; T=$(mktemp -d); trap 'rm -rf "${T:?}"' EXIT; fail=0
 expect() { # expect <pass|fail> <file> <needle>
   out=$(bash "$C" "$2" 2>&1); status=$?
@@ -20,8 +20,10 @@ jq '.command.install = "yes"' examples/cocoon-ai.json > "$T/cmd1.json"; expect f
 jq '.command.path = "/x"' examples/cocoon-ai.json > "$T/cmd2.json"; expect fail "$T/cmd2.json" "unknown key in command: path"
 jq 'del(.command)' examples/cocoon-ai.json > "$T/cmd3.json"; expect pass "$T/cmd3.json" ""
 echo "not json" > "$T/bad.json"; expect fail "$T/bad.json" "not valid JSON"
-out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude -- --research 2>&1); grep -q 'agent claude as cocoon-claude\[bot\] <324573615+cocoon-claude\[bot\]@users.noreply.github.com>, App 4819921' <<< "$out" && grep -q 'chosen: --config research' <<< "$out" || { echo "FAIL: run.sh --dry claude: $out"; fail=1; }
-out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json gemini 2>&1); grep -q 'agent gemini as cocoon-gemini\[bot\]' <<< "$out" && grep -q 'cocoon-ai-gemini-config:/home/node/.gemini' <<< "$out" || { echo "FAIL: run.sh --dry gemini: $out"; fail=1; }
+out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude -- --research 2>&1)
+if ! { grep -q 'agent claude as cocoon-claude\[bot\] <324573615+cocoon-claude\[bot\]@users.noreply.github.com>, App 4819921' <<< "$out" && grep -q 'chosen: --config research' <<< "$out"; }; then echo "FAIL: run.sh --dry claude: $out"; fail=1; fi
+out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json gemini 2>&1)
+if ! { grep -q 'agent gemini as cocoon-gemini\[bot\]' <<< "$out" && grep -q 'cocoon-ai-gemini-config:/home/node/.gemini' <<< "$out"; }; then echo "FAIL: run.sh --dry gemini: $out"; fail=1; fi
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude -- --nope 2>&1); grep -q "unknown profile '--nope'" <<< "$out" || { echo "FAIL: run.sh --dry unknown profile: $out"; fail=1; }
 out=$(HOME="$T" bash host/cocoon-launch.sh --dry 2>&1); grep -q "no configuration at $T/.config/cocoon/sandbox.json" <<< "$out" || { echo "FAIL: launcher without a configuration: $out"; fail=1; }
 out=$(bash host/cocoon-launch.sh --dry "--config=$T/elsewhere.json" 2>&1); grep -q "no configuration at $T/elsewhere.json" <<< "$out" || { echo "FAIL: launcher --config=<path>: $out"; fail=1; }
@@ -34,7 +36,7 @@ out=$(bash host/cocoon-launch.sh --config "$T/x.json" 2>&1); grep -q "use --conf
 jq --arg bin "${T:?}/bin" '.command = {install: true, bin: $bin} | .sandbox.repo = "theCocoonStudio/no-such-repo-for-this-test"' examples/cocoon-ai.json > "$T/install.json"
 cp host/cocoon-launch.sh "$T/downloaded.sh"
 out=$(PATH=/usr/bin:/bin bash "$T/downloaded.sh" --dry "--config=$T/install.json" 2>&1 || true)
-grep -q "installed as $T/bin/cocoon" <<< "$out" && cmp -s "$T/downloaded.sh" "$T/bin/cocoon" && [ -x "$T/bin/cocoon" ] && grep -q "not on your PATH" <<< "$out" || { echo "FAIL: launcher install: $out"; fail=1; }
+if ! { grep -q "installed as $T/bin/cocoon" <<< "$out" && cmp -s "$T/downloaded.sh" "$T/bin/cocoon" && [ -x "$T/bin/cocoon" ] && grep -q "not on your PATH" <<< "$out"; }; then echo "FAIL: launcher install: $out"; fail=1; fi
 out=$(bash "$T/bin/cocoon" --dry "--config=$T/install.json" 2>&1 || true); grep -q "installed as" <<< "$out" && { echo "FAIL: the installed copy reinstalled itself: $out"; fail=1; }
 jq '.command.install = false' "$T/install.json" > "$T/noinstall.json"; rm -f "${T:?}/bin/cocoon"
 out=$(bash "$T/downloaded.sh" --dry "--config=$T/noinstall.json" 2>&1 || true); [ ! -e "$T/bin/cocoon" ] || { echo "FAIL: installed with command.install false: $out"; fail=1; }
