@@ -46,6 +46,7 @@ TOOLS=(
 )
 # A run.sh from before the launcher bind-mounted the host's clone; refuse it rather than
 # mount a temp dir as the workspace. The marker is the mount it must NOT contain.
+# shellcheck disable=SC2016  # the literal text of the old mount line, $PWD included; nothing to expand
 OLD_RUN_MARKER='"$PWD":/workspace'
 
 for tool in "${TOOLS[@]}"; do
