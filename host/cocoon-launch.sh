@@ -1,11 +1,17 @@
 #!/bin/bash
-# The host-side launcher. Install ONCE, by hand, outside any repo: the launcher, then the
-# configuration file beside your own dotfiles, copied from the example and filled in:
+# The host-side launcher, run by a login user who is not a sudoer: with rootless podman and
+# the user's id kept, the container's user IS this host user, so a breakout must find nothing
+# to elevate with. Nothing here needs sudo and nothing asks for it. Install ONCE, by hand,
+# outside any repo: the configuration file
+# beside your own dotfiles, copied from the example and filled in, then one download of
+# this script and one run of it:
 #
-#   curl -fsSL https://raw.githubusercontent.com/theCocoonStudio/cocoon-agent-sandbox/main/host/cocoon-launch.sh -o ~/bin/cocoon && chmod 755 ~/bin/cocoon
 #   mkdir -p ~/.config/cocoon && curl -fsSL https://raw.githubusercontent.com/theCocoonStudio/cocoon-agent-sandbox/main/examples/cocoon-ai.json -o ~/.config/cocoon/sandbox.json
+#   curl -fsSL https://raw.githubusercontent.com/theCocoonStudio/cocoon-agent-sandbox/main/host/cocoon-launch.sh -o cocoon-launch.sh && bash cocoon-launch.sh --dry
 #
-# then start sessions with `cocoon claude` or `cocoon gemini`; `cocoon --dry` downloads
+# With `command.install` true in the file (the example has it) that run puts this script on
+# your PATH as `cocoon`, in the directory the platform expects (below). Then start sessions
+# with `cocoon claude` or `cocoon gemini`; `cocoon --dry` downloads
 # and checks without starting anything; `cocoon --config=<path> claude` runs another
 # configuration file than the default one (a leading ~ is expanded here, for shells that
 # do not expand it after =). The host keeps no clone of any repo and the
@@ -58,8 +64,41 @@ done
 
 [ -r "$CONFIG" ] || { echo "launcher: no configuration at $CONFIG; copy examples/cocoon-ai.json from the sandbox repository there and fill it in" >&2; exit 1; }
 
+# --- The command on this host, when the configuration asks for it ----------------------------
+# `command.install: true` puts this launcher on the PATH as `cocoon`, so the install is one
+# download and one run. Where, unless `command.bin` says: Linux ~/.local/bin (the XDG place,
+# a Linux convention; Debian and Fedora put it on the PATH when it exists); macOS has no
+# user-writable directory on its default PATH except Homebrew's prefix, which depends on the
+# architecture, /opt/homebrew/bin on Apple silicon and /usr/local/bin on Intel; without a
+# writable one the launcher refuses to guess and asks for `command.bin`. The installed copy
+# never rewrites itself: only a launcher run from elsewhere (a fresh download) installs, so
+# the running copy is the one you reviewed and reinstalling stays your decision. The script's
+# own path is resolved with cd and pwd -P, not GNU readlink -f, which macOS lacked until 12.3.
+self=$(cd "$(dirname "$0")" && pwd -P)/$(basename "$0")
+if [ "$(jq -r '.command.install // false' "$CONFIG")" = true ]; then
+  bin=$(jq -r '.command.bin // empty' "$CONFIG"); bin=${bin/#\~/$HOME}
+  if [ -z "$bin" ]; then
+    case "$(uname -s)/$(uname -m)" in
+      Darwin/arm64) bin=/opt/homebrew/bin ;;
+      Darwin/*)     bin=/usr/local/bin ;;
+      *)            bin=$HOME/.local/bin ;;
+    esac
+    if [ "$(uname -s)" = Darwin ] && ! { [ -d "$bin" ] && [ -w "$bin" ]; }; then
+      echo "launcher: $bin (Homebrew's prefix for this architecture) is not writable here; set command.bin in $CONFIG to a directory on your PATH" >&2; exit 1
+    fi
+  fi
+  if [ "$self" != "$bin/cocoon" ]; then
+    mkdir -p "$bin"
+    if ! { [ -f "$bin/cocoon" ] && cmp -s "$self" "$bin/cocoon"; }; then
+      cp "$self" "$bin/cocoon" && chmod 755 "$bin/cocoon"
+      echo "launcher: installed as $bin/cocoon" >&2
+    fi
+    case ":$PATH:" in *":$bin:"*) ;; *) echo "launcher: NOTE $bin is not on your PATH; add it, or call $bin/cocoon" >&2 ;; esac
+  fi
+fi
+
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+trap 'rm -rf "${tmp:?}"' EXIT
 
 # One reviewed tarball: the commit a ref points at, for the record, then that commit's archive,
 # unpacked only as far as $3. Public repos: no credential; the download follows GitHub's redirect.
@@ -84,7 +123,7 @@ host=$(fetch "$sandbox_repo" "$sandbox_ref" host)
 if grep -qF "$OLD_RUN_MARKER" "$dc/run.sh"; then
   echo "launcher: $sandbox_ref's run.sh predates the launcher (it mounts the host's clone); use a newer ref" >&2; exit 1
 fi
-if ! cmp -s "$host/cocoon-launch.sh" "$(readlink -f "$0")"; then
+if ! cmp -s "$host/cocoon-launch.sh" "$self"; then
   echo "launcher: NOTE this installed launcher differs from $sandbox_ref's copy; reinstall it after reviewing the diff" >&2
 fi
 

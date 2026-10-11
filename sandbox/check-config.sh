@@ -11,12 +11,19 @@ problems=$(jq -r '
   def req($o; $names): [$names[] | . as $n | select(($o | has($n)) | not)];
   [
     (if .version != 1 then "version must be 1" else empty end),
-    (keys_only(["version","sandbox","image","account","workspace","clones","profiles","agents"])[] | "unknown top-level key: " + .),
+    (keys_only(["version","sandbox","command","image","account","workspace","clones","profiles","agents"])[] | "unknown top-level key: " + .),
     (req(.; ["sandbox","image","account","workspace","agents"])[] | "missing: " + .),
     (if (.sandbox|type) == "object" then
        (.sandbox | keys_only(["repo","ref"])[] | "unknown key in sandbox: " + .),
        (req(.sandbox; ["repo","ref"])[] | "missing in sandbox: " + .)
      else "sandbox must be an object" end),
+    (if has("command") then
+       (if (.command|type) != "object" then "command must be an object" else
+          (.command | keys_only(["install","bin"])[] | "unknown key in command: " + .),
+          (if (.command | has("install")) and ((.command.install|type) != "boolean") then "command.install must be true or false" else empty end),
+          (if (.command | has("bin")) and ((.command.bin|type) != "string") then "command.bin must be a string" else empty end)
+        end)
+     else empty end),
     (if (.workspace|type) == "object" then
        (.workspace | keys_only(["repo"])[] | "unknown key in workspace: " + .),
        (req(.workspace; ["repo"])[] | "missing in workspace: " + .)
