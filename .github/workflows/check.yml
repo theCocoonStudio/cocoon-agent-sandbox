@@ -1,0 +1,28 @@
+# The sandbox's own check, run where nobody has to remember it. Two jobs, each a status
+# on the PR: `check`, the configuration contract and every script's syntax
+# (tests/check-config.test.sh; jq and bash are all it needs); `image`, the image built
+# from sandbox/ exactly as run.sh builds it, then the entrypoint started in it with the
+# two capabilities run.sh grants and `true` as the agent's command, so the firewall runs
+# and its self-test decides the job: an ordinary public site unreachable, the gateway
+# deaf on UDP 53, GitHub reachable. Nothing is mounted, so no configuration, no token
+# and no clone: the entrypoint says so and hands over to `true`. Made required statuses
+# in the main ruleset, both bind.
+name: check
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tests/check-config.test.sh
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build the image as run.sh builds it
+        run: docker build -t cocoon-sandbox:ci sandbox/
+      - name: start the entrypoint in it with the firewall's capabilities; its self-test decides
+        run: docker run --rm --cap-add=NET_ADMIN --cap-add=NET_RAW cocoon-sandbox:ci true
