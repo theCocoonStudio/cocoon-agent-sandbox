@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/theCocoonStudio/cocoon-agent-sandbox/schema/sandbox.schema.json",
+  "title": "cocoon-agent-sandbox configuration, version 1",
+  "description": "One file, held and reviewed by the consuming repository. Nothing is read from the environment; unknown keys are refused; an empty profile is the strictest container.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "sandbox", "image", "account", "workspace", "agents"],
+  "properties": {
+    "version": { "const": 1 },
+    "sandbox": { "type": "object", "additionalProperties": false, "required": ["repo", "ref"],
+      "properties": { "repo": { "type": "string", "description": "owner/repo of this library" }, "ref": { "type": "string", "description": "the tag or branch the launcher downloads and runs; pin a tag" } } },
+    "image": { "type": "string", "description": "the podman image name built from sandbox/" },
+    "account": { "type": "string", "description": "the GitHub account the agents' Apps are installed on" },
+    "workspace": { "type": "object", "additionalProperties": false, "required": ["repo"],
+      "properties": { "repo": { "type": "string", "description": "owner/repo cloned into the workspace volume on first start" } } },
+    "clones": { "type": "array", "items": { "type": "string" }, "default": [], "description": "owner/repo cloned beside the workspace on first start, ephemeral" },
+    "profiles": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }, "default": [], "description": "named hosts lists (sandbox/configs/<name>.hosts) the host user may turn on for one session with `-- --<name>`" },
+    "agents": { "type": "object", "minProperties": 1, "additionalProperties": false,
+      "properties": { "claude": { "$ref": "#/$defs/agent" }, "gemini": { "$ref": "#/$defs/agent" } } }
+  },
+  "$defs": {
+    "agent": { "type": "object", "additionalProperties": false, "required": ["app_id", "key", "bot", "bot_id", "container", "workspace_volume", "config_volume"],
+      "properties": {
+        "app_id": { "type": "string", "description": "the GitHub App that is this agent's identity" },
+        "key": { "type": "string", "description": "host path of the App's private key, mode 600; never mounted" },
+        "bot": { "type": "string", "description": "the App's bot user, <slug>[bot]" },
+        "bot_id": { "type": "string", "description": "the bot user's numeric id, for the no-reply email" },
+        "container": { "type": "string" },
+        "workspace_volume": { "type": "string" },
+        "config_volume": { "type": "string", "description": "<volume>:<path in the container> for the agent's own state" },
+        "tokens_file": { "type": "string", "description": "host path of a mode-600 file with one KEY=value line the agent needs (read, never sourced)" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" }, "default": {}, "description": "environment set in the container for this agent, each line a reviewed decision" }
+      } }
+  }
+}

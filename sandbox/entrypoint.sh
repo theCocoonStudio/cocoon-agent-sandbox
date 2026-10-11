@@ -47,9 +47,15 @@ fi
 # The workspace is a named volume, not a bind mount of anything on the host: the repo is
 # cloned into it on the first start and kept across runs and image rebuilds. Branches and
 # commits here reach the host only through GitHub, behind the ruleset's review.
+CFG=/etc/cocoon/sandbox.json   # run.sh mounts the reviewed configuration read-only
+WORKSPACE_REPO=$(jq -r '.workspace.repo' "$CFG" 2>/dev/null || true)
 if [ ! -d /workspace/.git ]; then
-  echo "cloning cocoon-ai into the workspace volume (first start)..."
-  git clone -q https://github.com/theCocoonStudio/cocoon-ai.git /workspace
+  if [ -n "$WORKSPACE_REPO" ] && [ "$WORKSPACE_REPO" != null ]; then
+    echo "cloning $WORKSPACE_REPO into the workspace volume (first start)..."
+    git clone -q "https://github.com/$WORKSPACE_REPO.git" /workspace
+  else
+    echo "no configuration at $CFG: the workspace is not cloned (run through run.sh with a configuration)"
+  fi
 fi
 cd /workspace
 
@@ -67,16 +73,16 @@ if [ -f package-lock.json ]; then
   fi
 fi
 
-# cocoon-ai-records (exports, the logs), cocoon-ml and cocoon-relations are cloned beside
-# the workspace on the first start that has a token; a repo that does not exist yet, or
+# The configuration's clones are cloned beside the workspace on the first start that has a token; a repo that does not exist yet, or
 # that the App is not installed on, fails its clone and is retried next start. /home/node is not a volume: a fresh container
 # re-clones, and local branches not pushed are lost (the records convention says so).
-for repo in cocoon-ai-records cocoon-ml cocoon-relations; do
-  dir=/home/node/$repo
+while IFS= read -r slug; do
+  [ -n "$slug" ] || continue
+  dir=/home/node/${slug##*/}
   if [ -n "${GH_TOKEN:-}" ] && [ ! -d "$dir/.git" ]; then
-    echo "cloning $repo (first start in this container)..."
-    gh repo clone "theCocoonStudio/$repo" "$dir" -- -q || echo "clone of $repo failed; will retry next start"
+    echo "cloning $slug (first start in this container)..."
+    gh repo clone "$slug" "$dir" -- -q || echo "clone of $slug failed; will retry next start"
   fi
-done
+done < <(jq -r '(.clones // [])[]' "$CFG" 2>/dev/null || true)
 
 exec "$@"

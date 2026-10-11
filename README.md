@@ -31,9 +31,13 @@ An admin with git may run `sandbox/run.sh` from a checkout they have reviewed. T
 
 ## Configuration
 
-Today every value lives in one block at the top of `run.sh` (the image name, the account, the Apps, the volumes, the known named lists) and in the hosts lists under `sandbox/configs/`. A change is a pull request. Nothing is read from the environment: a variable the host happens to have set must never decide what runs.
+One file, `cocoon-sandbox.json`, held by the consuming repository and reviewed there by pull request; [`examples/cocoon-ai.json`](examples/cocoon-ai.json) is cocoon-ai's. It names the sandbox to run (this repository and a ref to pin), the image, the account the agents' Apps are installed on, the workspace repository, the repositories cloned beside it, the profiles the host user may turn on for a session, and one profile per agent: the App's id and the host path of its key, the bot user and its id, the container and volume names, an optional tokens file read one line at a time and never sourced, and the environment set for that agent, each line a reviewed decision.
 
-The next step in this repository is one configuration file, validated against a schema, that a consuming repository holds and reviews: the agents and their pinned versions, the hosts, the repositories to clone, the volumes, the named lists, and a profile per agent so a third agent is an entry and not a fork. An empty configuration gives the strictest container; unknown keys are refused.
+The launcher downloads the consuming repository's `main` for the file and this library at the ref the file pins, both over HTTPS behind their rulesets, and runs that `run.sh` with that file; the container gets the file mounted read-only at `/etc/cocoon/sandbox.json`, where the entrypoint reads the repositories to clone. Nothing is read from the environment. `sandbox/check-config.sh` validates the file with jq alone before anything runs: a wrong version, a missing key or a key nobody reads is refused with the problem named; [`schema/sandbox.schema.json`](schema/sandbox.schema.json) is the same contract for tools that speak JSON Schema. An absent `clones`, `profiles` or `env` means none: the strictest container is the one you get by saying nothing.
+
+`run.sh --dry <config> [agent]` prints what would run, mints nothing and starts nothing; `tests/check-config.test.sh` runs the validator's cases and the dry runs.
+
+The hosts lists stay files under `sandbox/configs/` for now, one per agent and per profile, baked into the image; moving them into the configuration is the next step, together with the gateway described under Next.
 
 ## The protocol
 
@@ -56,7 +60,7 @@ Stated because an allowlist that cannot name them is a false comfort.
 
 ## Next
 
-- **One configuration file** with a schema, as above, and this repository's own CI building the image and running its self-checks.
+- **This repository's own CI** building the image and running the validator's tests and the firewall's self-checks, once Actions can be added; the hosts lists into the configuration.
 - **A dependency check on a schedule** for every deployed repository: the lockfile against the advisory databases, by CVSS score, reported before anyone asks.
 - **A gateway.** One host in the wall instead of a list: the owner's own API gateway, one subdomain per upstream, the GitHub API wrapped with a policy table that refuses what the rules forbid, a client certificate to get in and a token for access, and no credential of any kind inside the container. The wall then shrinks to one address and the token's hour disappears.
 
