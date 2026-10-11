@@ -6,7 +6,9 @@
 #   mkdir -p ~/.config/cocoon && curl -fsSL https://raw.githubusercontent.com/theCocoonStudio/cocoon-agent-sandbox/main/examples/cocoon-ai.json -o ~/.config/cocoon/sandbox.json
 #
 # then start sessions with `cocoon claude` or `cocoon gemini`; `cocoon --dry` downloads
-# and checks without starting anything. The host keeps no clone of any repo and the
+# and checks without starting anything; `cocoon --config=<path> claude` runs another
+# configuration file than the default one (a leading ~ is expanded here, for shells that
+# do not expand it after =). The host keeps no clone of any repo and the
 # login user has no git: there is nothing of the agent's on the host to execute, and
 # nothing of any repository either, not even for the configuration (the owner,
 # 2026-10-11: no git on the host, so no repository there, not even the first time).
@@ -28,7 +30,7 @@
 set -euo pipefail
 
 # --- Everything this script knows, in one place ---------------------------------------------
-CONFIG=~/.config/cocoon/sandbox.json  # the host's configuration, placed by hand; the only input
+CONFIG=~/.config/cocoon/sandbox.json  # the host's configuration, placed by hand; the only input (--config=<path> overrides)
 API=https://api.github.com/repos
 # Tools, and what each is for. run.sh adds openssl (the App JWT) and podman; it checks its own.
 TOOLS=(
@@ -45,7 +47,14 @@ for tool in "${TOOLS[@]}"; do
 done
 
 DRY=0
-if [ "${1:-}" = "--dry" ]; then DRY=1; shift; fi
+while [ $# -gt 0 ]; do   # the launcher's own options come first; the rest is the agent, its args and the profiles
+  case "$1" in
+    --dry) DRY=1; shift ;;
+    --config=*) CONFIG=${1#--config=}; CONFIG=${CONFIG/#\~/$HOME}; shift ;;
+    --config) echo "launcher: use --config=<path> (with the =); --config <name> after -- is a profile for the sandbox" >&2; exit 1 ;;
+    *) break ;;
+  esac
+done
 
 [ -r "$CONFIG" ] || { echo "launcher: no configuration at $CONFIG; copy examples/cocoon-ai.json from the sandbox repository there and fill it in" >&2; exit 1; }
 

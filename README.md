@@ -26,7 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/theCocoonStudio/cocoon-agent-sandbo
 mkdir -p ~/.config/cocoon && curl -fsSL https://raw.githubusercontent.com/theCocoonStudio/cocoon-agent-sandbox/main/examples/cocoon-ai.json -o ~/.config/cocoon/sandbox.json
 ```
 
-Then edit `~/.config/cocoon/sandbox.json` by hand: the account, the workspace repository, the App ids and key paths, the clones. The launcher refuses to start without it.
+Then edit `~/.config/cocoon/sandbox.json` by hand: the account, the workspace repository, the App ids and key paths, the clones. The launcher refuses to start without it. Another file, for another workspace or a trial: `cocoon --config=<path> claude` (the `=` form only; `--config <name>` after `--` is a profile for the sandbox).
 
 Then `cocoon claude` or `cocoon gemini` starts a session as that agent's bot user; `cocoon claude -- --research` turns a named hosts list on for that session; `cocoon --dry` downloads and checks without starting anything. The launcher compares its installed copy with the one on `main` and says so when they differ; reinstalling is your decision.
 

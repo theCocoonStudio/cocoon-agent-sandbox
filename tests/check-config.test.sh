@@ -21,5 +21,8 @@ out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude -- --research 2>&
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json gemini 2>&1); grep -q 'agent gemini as cocoon-gemini\[bot\]' <<< "$out" && grep -q 'cocoon-ai-gemini-config:/home/node/.gemini' <<< "$out" || { echo "FAIL: run.sh --dry gemini: $out"; fail=1; }
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude -- --nope 2>&1); grep -q "unknown profile '--nope'" <<< "$out" || { echo "FAIL: run.sh --dry unknown profile: $out"; fail=1; }
 out=$(HOME="$T" bash host/cocoon-launch.sh --dry 2>&1); grep -q "no configuration at $T/.config/cocoon/sandbox.json" <<< "$out" || { echo "FAIL: launcher without a configuration: $out"; fail=1; }
+out=$(bash host/cocoon-launch.sh --dry "--config=$T/elsewhere.json" 2>&1); grep -q "no configuration at $T/elsewhere.json" <<< "$out" || { echo "FAIL: launcher --config=<path>: $out"; fail=1; }
+out=$(HOME="$T" bash host/cocoon-launch.sh '--config=~/tilde.json' --dry 2>&1); grep -q "no configuration at $T/tilde.json" <<< "$out" || { echo "FAIL: launcher --config=~ expansion: $out"; fail=1; }
+out=$(bash host/cocoon-launch.sh --config "$T/x.json" 2>&1); grep -q "use --config=<path>" <<< "$out" || { echo "FAIL: launcher --config without =: $out"; fail=1; }
 for f in sandbox/*.sh host/*.sh hooks/*.sh tests/*.sh; do bash -n "$f" || { echo "FAIL: syntax: $f"; fail=1; }; done
 [ $fail -eq 0 ] && echo "check-config tests: all pass"; exit $fail
