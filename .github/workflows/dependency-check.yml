@@ -1,0 +1,43 @@
+# The dependency check on a schedule: the owner's rule for every deployed repository
+# (2026-10-11), of which this is the first instance. What this repository deploys is the
+# image, and its dependencies are the agent CLIs pinned in sandbox/Dockerfile. Once a week
+# and on demand, each pin is judged: the advisories that affect the pinned version
+# (GitHub's advisory database, the one npm audit reads; each finding carries its severity
+# and CVSS score) and the newest release on npm, so a bump is proposed with the changelog
+# read. An advisory against a pin turns the run red, and a red scheduled run is an email
+# to the owner. Not a PR status, on purpose: a required status that a schedule drives would
+# never be set on a PR. Other databases (OSV, NVD, Snyk, Black Duck) are options for later;
+# GitHub's lags the curated ones.
+name: dependency-check
+on:
+  schedule:
+    - cron: "17 11 * * 1" # Mondays 11:17 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: every pinned CLI against the advisory database and the registry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # ARG name -> npm package, the same table as hooks/version-check.sh; add a line when a new CLI is pinned
+          declare -A PACKAGES=([CLAUDE_CODE_VERSION]=@anthropic-ai/claude-code [GEMINI_CLI_VERSION]=@google/gemini-cli)
+          red=0
+          { echo "| package | pinned | latest | advisories affecting the pin |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
+          for arg in "${!PACKAGES[@]}"; do
+            pkg=${PACKAGES[$arg]}
+            pinned=$(sed -n "s/^ARG $arg=\(.*\)$/\1/p" sandbox/Dockerfile | head -1)
+            [ -n "$pinned" ] || { echo "no ARG $arg in sandbox/Dockerfile"; exit 1; }
+            latest=$(npm view "$pkg" version)
+            advisories=$(gh api "/advisories?ecosystem=npm&affects=$pkg@$pinned" \
+              --jq '[.[] | "\(.ghsa_id) \(.severity) cvss \(.cvss.score // "n/a")"] | join("; ")')
+            echo "| $pkg | $pinned | $latest | ${advisories:-none} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "$pkg: pinned $pinned, latest $latest, advisories against the pin: ${advisories:-none}"
+            [ -z "$advisories" ] || red=1
+          done
+          exit $red
