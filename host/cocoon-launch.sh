@@ -117,7 +117,9 @@ fetch() { # fetch <owner/repo> <ref> <path within the repo> -> prints <dir of th
 config=$CONFIG
 sandbox_repo=$(jq -r '.sandbox.repo' "$config")
 sandbox_ref=$(jq -r '.sandbox.ref' "$config")
-[ -n "$sandbox_repo" ] && [ "$sandbox_repo" != null ] && [ -n "$sandbox_ref" ] && [ "$sandbox_ref" != null ] || { echo "launcher: $CONFIG names no sandbox.repo and sandbox.ref" >&2; exit 1; }
+if ! { [ -n "$sandbox_repo" ] && [ "$sandbox_repo" != null ] && [ -n "$sandbox_ref" ] && [ "$sandbox_ref" != null ]; }; then
+  echo "launcher: $CONFIG names no sandbox.repo and sandbox.ref" >&2; exit 1
+fi
 dc=$(fetch "$sandbox_repo" "$sandbox_ref" sandbox)
 host=$(fetch "$sandbox_repo" "$sandbox_ref" host)
 
