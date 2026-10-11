@@ -1,7 +1,8 @@
 #!/bin/bash
 # Diagnose a "container create failed (no logs from conmon)" error.
 # Runs the image with the same flags as run.sh but skips the entrypoint.
-cd "$(dirname "$0")/.."
+set -uo pipefail   # every command runs and is shown, a failing one included; that is the diagnosis
+cd "$(dirname "$0")/.." || exit 1
 IMAGE=cocoon-ai-sandbox
 {
   echo "== podman version =="; podman version

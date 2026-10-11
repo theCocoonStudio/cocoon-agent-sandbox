@@ -44,7 +44,7 @@ The hosts lists stay files under `sandbox/configs/` for now, one per agent and p
 
 ## What checks what
 
-- **`check`** (`.github/workflows/check.yml`), on every pull request and on `main`: the configuration contract's tests and every script's syntax, and, as the second job `image`, the image built from `sandbox/` as `run.sh` builds it, then the entrypoint started in it with the firewall's two capabilities so the firewall's self-test decides: an ordinary public site unreachable, the gateway deaf on UDP 53, GitHub reachable. Made required statuses in the main ruleset, the check passes is a fact on the PR page.
+- **`check`** (`.github/workflows/check.yml`), on every pull request and on `main`: the lint (`tests/lint.sh`: ShellCheck with [`.shellcheckrc`](.shellcheckrc) over every script, each enabled check a class of mistake we made, plus the classes a linter cannot see as greps: a recursive delete on a variable path without `${var:?}`, `cherry-pick -q`, a script without `pipefail`), the configuration contract's tests and every script's syntax, and, as the second job `image`, the image built from `sandbox/` as `run.sh` builds it, then the entrypoint started in it with the firewall's two capabilities so the firewall's self-test decides: an ordinary public site unreachable, the gateway deaf on UDP 53, GitHub reachable. Made required statuses in the main ruleset, the check passes is a fact on the PR page.
 - **`reviewer-policy`** (`.github/workflows/reviewer-policy.yml`): who may approve whose PR, as a status rather than a habit. The owner's PRs need the agent's approval; the agent's need the owner's; a second agent's approval satisfies nobody's. The file is code-owned, so a PR cannot rewrite the policy that judges it.
 - **`dependency-check`** (`.github/workflows/dependency-check.yml`), weekly and on demand: each pinned CLI against GitHub's advisory database and the registry's newest release, red on an advisory against a pin. The owner's rule for every deployed repository; the hook does the same at session start for the agent.
 
@@ -57,6 +57,7 @@ The rules the files follow, each learned the hard way:
 - **Tools declared once.** Each shell script opens with the list of tools it needs and why, and checks them.
 - **Pinned, with a watch.** The agent CLIs are pinned by version; the hook reports newer releases; a bump is a reviewed change with the changelog read and the advisories checked.
 - **Every security line explained.** A line that cannot be explained does not ship. The headers of the scripts are the explanations.
+- **Nothing unlinted.** Every script passes `tests/lint.sh` before it is committed, and CI refuses what does not; a new class of mistake becomes a rule there the day it is found (Izzy, 2026-10-11: "we never write unlinted code"). Scripts are bash, never zsh: ShellCheck does not read zsh, and bash is on every Linux and on macOS (3.2 there; the launcher stays within it, `run.sh` needs 4 or newer).
 
 ## Known limits
 

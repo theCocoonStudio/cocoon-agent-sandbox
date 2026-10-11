@@ -8,6 +8,7 @@
 # then exits 2 so the harness re-wakes Claude with the message on stderr.
 # Outside the container (no ghs_ token, or no PID 1 age) it exits 0 and does nothing.
 
+set -uo pipefail   # no -e: the hook decides its exit code itself (0 to stay quiet, 2 to wake the agent)
 case "${GH_TOKEN:-}" in
   ghs_*) ;;
   *) exit 0 ;;
@@ -16,6 +17,7 @@ esac
 age=$(ps -o etimes= -p 1 2>/dev/null | tr -d ' ')
 case "$age" in
   ''|*[!0-9]*) exit 0 ;;
+  *) ;;
 esac
 
 limit=${GH_TOKEN_WARN_SECONDS:-3000}
