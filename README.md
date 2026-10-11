@@ -10,7 +10,7 @@ An agent with a shell, a toolchain and GitHub access can do a great deal of good
 
 Each is a precondition for the one after it. Each has its reason in the header of the file that implements it.
 
-1. **The box.** A dedicated machine whose login user cannot elevate and has no git. Nothing of the owner's lives there except the GitHub App's private key and the launcher. Rootless podman, so there is no privileged daemon in the path and container root is an unprivileged subordinate uid on the host.
+1. **The box.** A dedicated machine whose login user is not a sudoer (no sudo, and no group that elevates: wheel, admin, docker) and has no git. Why the first: under rootless podman with the user's id kept, the container's user IS that host user, so a namespace breakout lands as them and must find nothing to elevate with. Nothing of the owner's lives there except the GitHub App's private key and the launcher. Rootless podman, so there is no privileged daemon in the path and container root is an unprivileged subordinate uid on the host.
 2. **The launcher** (`host/cocoon-launch.sh`). Installed once by hand outside any repo, with the configuration file beside the host's own dotfiles. It downloads this repo as a tarball over HTTPS at the ref the configuration pins, unpacks only `sandbox/` and `host/`, and runs that `run.sh` with that configuration; `run.sh` builds the image from its own directory. The agent's working tree is a container volume the host never reads, and no repository is ever on the host, not even for the configuration. Why: twice, a host that built from a tree the agent could write executed unreviewed sandbox scripts at a restart. A reviewed ref is now the only thing that runs.
 3. **The identity** (`sandbox/run.sh`). The agent acts on GitHub as a bot user through a GitHub App. `run.sh` signs a short-lived JWT with the App's key on the host, exchanges it for a one-hour installation token, and passes only that token into the container. The key never enters the sandbox; the token lives in one process's environment and is written nowhere. One App per agent, so a review by one is never mistakable for the other's.
 4. **The container** (`sandbox/Dockerfile`, `sandbox/entrypoint.sh`). Node on Debian, a non-root user, the agent CLIs pinned by version, npm lifecycle scripts off, the workspace and the agent's own state in named volumes. The entrypoint clones the repositories on first start, runs the firewall, and hands over to the agent. Its one sudo right is the firewall script.
@@ -19,22 +19,22 @@ Each is a precondition for the one after it. Each has its reason in the header o
 
 ## Install and run
 
-On the box, once, by hand:
+On the host, once, by hand, as the user that will run the sessions, who must not be a sudoer (the box, above); nothing below needs sudo, and the launcher never asks for it: the configuration file, then one download of the launcher and one run of it.
 
 ```
-curl -fsSL https://raw.githubusercontent.com/theCocoonStudio/cocoon-agent-sandbox/main/host/cocoon-launch.sh -o ~/bin/cocoon && chmod 755 ~/bin/cocoon
 mkdir -p ~/.config/cocoon && curl -fsSL https://raw.githubusercontent.com/theCocoonStudio/cocoon-agent-sandbox/main/examples/cocoon-ai.json -o ~/.config/cocoon/sandbox.json
+curl -fsSL https://raw.githubusercontent.com/theCocoonStudio/cocoon-agent-sandbox/main/host/cocoon-launch.sh -o cocoon-launch.sh && bash cocoon-launch.sh --dry
 ```
 
-Then edit `~/.config/cocoon/sandbox.json` by hand: the account, the workspace repository, the App ids and key paths, the clones. The launcher refuses to start without it. Another file, for another workspace or a trial: `cocoon --config=<path> claude` (the `=` form only; `--config <name>` after `--` is a profile for the sandbox).
+Edit `~/.config/cocoon/sandbox.json` first: the account, the workspace repository, the App ids and key paths, the clones. The launcher refuses to start without it. With `command.install` true in the file (the example has it), that first run puts the launcher on your PATH as `cocoon`: on Linux in `~/.local/bin`, the XDG place, which Debian and Fedora put on the PATH when it exists; on macOS in Homebrew's prefix for the architecture, `/opt/homebrew/bin` on Apple silicon and `/usr/local/bin` on Intel, the one user-writable directory on a Mac's default PATH, and without a writable one the launcher refuses to guess and asks for `command.bin`, which names the directory on either platform. The launcher says so when the directory is not on your PATH. The installed `cocoon` never rewrites itself; a newer download run by hand replaces it, which is reinstalling, your decision after reading the diff the launcher reports.
 
-Then `cocoon claude` or `cocoon gemini` starts a session as that agent's bot user; `cocoon claude -- --research` turns a named hosts list on for that session; `cocoon --dry` downloads and checks without starting anything. The launcher compares its installed copy with the one on `main` and says so when they differ; reinstalling is your decision.
+Then `cocoon claude` or `cocoon gemini` starts a session as that agent's bot user; `cocoon claude -- --research` turns a named hosts list on for that session; `cocoon --dry` downloads and checks without starting anything; `cocoon --config=<path> claude` runs another configuration file (the `=` form only; `--config <name>` after `--` is a profile for the sandbox). The launcher compares its installed copy with the one at the pinned ref and says so when they differ.
 
-An admin with git may run `sandbox/run.sh` from a checkout they have reviewed. The login user has no git, on purpose.
+An admin with git may run `sandbox/run.sh` from a checkout they have reviewed. The login user has no git and no sudo, on purpose.
 
 ## Configuration
 
-One file on the host, `~/.config/cocoon/sandbox.json`, placed and edited by hand like the launcher itself and never inside a repository (the host has no git, so no repository belongs there, not even for one file); [`examples/cocoon-ai.json`](examples/cocoon-ai.json) is cocoon-ai's, the template to copy. It names the sandbox to run (this repository and a ref to pin), the image, the account the agents' Apps are installed on, the workspace repository, the repositories cloned beside it, the profiles the host user may turn on for a session, and one profile per agent: the App's id and the host path of its key, the bot user and its id, the container and volume names, an optional tokens file read one line at a time and never sourced, and the environment set for that agent, each line a reviewed decision.
+One file on the host, `~/.config/cocoon/sandbox.json`, placed and edited by hand like the launcher itself and never inside a repository (the host has no git, so no repository belongs there, not even for one file); [`examples/cocoon-ai.json`](examples/cocoon-ai.json) is cocoon-ai's, the template to copy. It names the sandbox to run (this repository and a ref to pin), whether the launcher installs itself as the `cocoon` command and where (`command`), the image, the account the agents' Apps are installed on, the workspace repository, the repositories cloned beside it, the profiles the host user may turn on for a session, and one profile per agent: the App's id and the host path of its key, the bot user and its id, the container and volume names, an optional tokens file read one line at a time and never sourced, and the environment set for that agent, each line a reviewed decision.
 
 The launcher reads the file, downloads this library at the ref the file pins, over HTTPS behind this repository's ruleset, and runs that `run.sh` with that file; the container gets the file mounted read-only at `/etc/cocoon/sandbox.json`, where the entrypoint reads the repositories to clone. Nothing is read from the environment. `sandbox/check-config.sh` validates the file with jq alone before anything runs: a wrong version, a missing key or a key nobody reads is refused with the problem named; [`schema/sandbox.schema.json`](schema/sandbox.schema.json) is the same contract for tools that speak JSON Schema. An absent `clones`, `profiles` or `env` means none: the strictest container is the one you get by saying nothing.
 
@@ -66,6 +66,7 @@ Stated because an allowlist that cannot name them is a false comfort.
 - The allowlist is by address. A host on a shared CDN edge admits every other site that edge serves for the life of the container; `research.hosts` states this beside the hosts it affects. Narrowing by name needs a TLS-terminating proxy, which is the gateway described under Next.
 - The installation token lives one hour. A session that outlives it loses GitHub access until the next start.
 - The agent's own account may bring tools of its own into the session that no file here declares; the owner accepts or refuses them at the account, not here.
+- The launcher is written for Linux and macOS and has run on Linux; `run.sh` has run on Debian only. On macOS podman needs a machine, and two GNU forms in `run.sh` (`stat -c`, `readlink -f`) have BSD counterparts not yet written in.
 
 ## Next
 

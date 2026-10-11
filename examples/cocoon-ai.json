@@ -1,6 +1,7 @@
 {
   "version": 1,
   "sandbox": { "repo": "theCocoonStudio/cocoon-agent-sandbox", "ref": "main" },
+  "command": { "install": true },
   "image": "cocoon-ai-sandbox",
   "account": "theCocoonStudio",
   "workspace": { "repo": "theCocoonStudio/cocoon-ai" },
