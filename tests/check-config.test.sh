@@ -29,6 +29,25 @@ out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude -- --nope 2>&1); 
 # run.sh passed it twice and Claude Code took the second copy as the session's first prompt); no words means the image alone
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude --continue -- --research 2>&1); grep -q 'container command: cocoon-ai-sandbox --config research claude --continue$' <<< "$out" || { echo "FAIL: run.sh --dry container command: $out"; fail=1; }
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json 2>&1); grep -q 'container command: cocoon-ai-sandbox$' <<< "$out" || { echo "FAIL: run.sh --dry container command without an agent: $out"; fail=1; }
+# the gateway section: the gateway example passes; each half is refused without the other; a non-address, a bad hostname and an
+# unknown key in either section are refused with the problem named
+G=examples/cocoon-ai-gateway.json
+expect pass "$G" ""
+jq 'del(.agents.claude.gateway)' "$G" > "$T/gw1.json"; expect fail "$T/gw1.json" "agents.claude.gateway is required when gateway is configured"
+jq '.agents.claude.gateway = {cert: "c", key: "k", token: "t"}' examples/cocoon-ai.json > "$T/gw2.json"; expect fail "$T/gw2.json" "agents.claude.gateway is set but no gateway is configured"
+jq '.gateway.address = "gw.example"' "$G" > "$T/gw3.json"; expect fail "$T/gw3.json" "gateway.address must be an IPv4 address"
+jq '.gateway.domain = "GW"' "$G" > "$T/gw4.json"; expect fail "$T/gw4.json" "gateway.domain must be a hostname"
+jq '.gateway.port = 8443' "$G" > "$T/gw5.json"; expect fail "$T/gw5.json" "unknown key in gateway: port"
+jq '.agents.claude.gateway.extra = "x"' "$G" > "$T/gw6.json"; expect fail "$T/gw6.json" "unknown key in agents.claude.gateway: extra"
+# the dry run with a gateway: the four host files present, it names the gateway and its mounts, mints nothing, and the
+# container's command is unchanged; a key at a mode other than 600 or 400 is warned about; a missing file is refused by path
+mkdir -p "$T/gw"; for f in root.crt claude.crt claude.key claude.token; do echo x > "$T/gw/$f"; done; chmod 600 "$T/gw/claude.key" "$T/gw/claude.token"
+jq --arg d "$T/gw" '.gateway.ca = $d + "/root.crt" | .agents.claude.gateway = {cert: ($d + "/claude.crt"), key: ($d + "/claude.key"), token: ($d + "/claude.token")}' "$G" > "$T/gwdry.json"
+out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1)
+if ! { grep -q 'gateway gw.thecocoon.studio at 203.0.113.10; no token minted; mounts: root.crt, client.crt, client.key, client.token' <<< "$out" && grep -q 'container command: cocoon-ai-sandbox claude$' <<< "$out"; }; then echo "FAIL: run.sh --dry with a gateway: $out"; fail=1; fi
+grep -q 'WARNING' <<< "$out" && { echo "FAIL: run.sh --dry with a gateway warned at mode 600: $out"; fail=1; }
+chmod 644 "$T/gw/claude.key"; out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1); grep -q "WARNING $T/gw/claude.key has mode 644" <<< "$out" || { echo "FAIL: run.sh --dry gateway key mode: $out"; fail=1; }
+rm -f "${T:?}/gw/claude.token"; out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1); grep -q "gateway file not readable: $T/gw/claude.token" <<< "$out" || { echo "FAIL: run.sh --dry gateway missing file: $out"; fail=1; }
 out=$(HOME="$T" bash host/cocoon-launch.sh --dry 2>&1); grep -q "no configuration at $T/.config/cocoon/sandbox.json" <<< "$out" || { echo "FAIL: launcher without a configuration: $out"; fail=1; }
 out=$(bash host/cocoon-launch.sh --dry "--config=$T/elsewhere.json" 2>&1); grep -q "no configuration at $T/elsewhere.json" <<< "$out" || { echo "FAIL: launcher --config=<path>: $out"; fail=1; }
 out=$(HOME="$T" bash host/cocoon-launch.sh '--config=~/tilde.json' --dry 2>&1); grep -q "no configuration at $T/tilde.json" <<< "$out" || { echo "FAIL: launcher --config=~ expansion: $out"; fail=1; }
