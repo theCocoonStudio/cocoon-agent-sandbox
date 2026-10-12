@@ -12,11 +12,16 @@
 # knows comes from that file; nothing is read from the environment. check-config.sh refuses a
 # file with a key nobody reads.
 #
-# GitHub access: a GitHub App installation token, minted HERE on the host from the App's
-# private key (a host path in the configuration), and passed into the container as GH_TOKEN.
-# The key never enters the sandbox. The token is valid for 1 hour; a session that outlives it
-# loses push/PR access until run.sh is started again. Everything the agent does on GitHub is
-# attributed to the bot user.
+# GitHub access, two shapes the configuration chooses between:
+#   - no `gateway` section: a GitHub App installation token, minted HERE on the host from the
+#     App's private key (a host path in the configuration), passed into the container as
+#     GH_TOKEN; the key never enters the sandbox; the token lives 1 hour, so a session that
+#     outlives it loses push/PR access until run.sh is started again.
+#   - a `gateway` section: nothing is minted and no token enters the container at all. The
+#     owner's gateway holds the App's key; the container holds a client certificate and a
+#     per-role token that buy nothing outside that gateway, mounted read-only below, read by
+#     the container's relay (entrypoint.sh). Everything the agent does on GitHub is attributed
+#     to the bot user either way.
 set -euo pipefail
 SANDBOX="$(dirname "$0")"
 
@@ -64,11 +69,38 @@ TOKENS_FILE=$(a tokens_file); [ "$TOKENS_FILE" = null ] && TOKENS_FILE="" || TOK
 AGENT_ENV=()
 while IFS= read -r kv; do [ -n "$kv" ] && AGENT_ENV+=(-e "$kv"); done < <(cfg ".agents[\"$AGENT\"].env // {} | to_entries[] | \"\\(.key)=\\(.value)\"")
 
+# The gateway, when configured: the root's public half, this agent's certificate, key and token, each a host
+# file mounted read-only at a fixed path the entrypoint and the relay read; the key and the token mode 600.
+GATEWAY=0
+GW_MOUNTS=()
+if jq -e '.gateway' "$CONFIG" >/dev/null 2>&1; then
+  GATEWAY=1
+  GW_DOMAIN=$(cfg .gateway.domain)
+  GW_CA=$(expand "$(cfg .gateway.ca)")
+  GW_CERT=$(expand "$(a gateway.cert)")
+  GW_KEY=$(expand "$(a gateway.key)")
+  GW_TOKEN=$(expand "$(a gateway.token)")
+  for f in "$GW_CA" "$GW_CERT" "$GW_KEY" "$GW_TOKEN"; do
+    [ -r "$f" ] || { echo "run.sh: gateway file not readable: $f (certs.sh in the gateway repository makes them)" >&2; exit 1; }
+  done
+  for f in "$GW_KEY" "$GW_TOKEN"; do
+    perms=$(stat -c %a "$f")
+    [ "$perms" = "600" ] || [ "$perms" = "400" ] || echo "gateway: WARNING $f has mode $perms; chmod 600 it" >&2
+  done
+  GW_MOUNTS=(
+    -v "$GW_CA:/etc/cocoon/gateway/root.crt:ro"
+    -v "$GW_CERT:/etc/cocoon/gateway/client.crt:ro"
+    -v "$GW_KEY:/etc/cocoon/gateway/client.key:ro"
+    -v "$GW_TOKEN:/etc/cocoon/gateway/client.token:ro"
+  )
+fi
+
 if [ "$DRY" = 1 ]; then
   echo "run.sh --dry: agent $AGENT as $BOT_NAME <$BOT_EMAIL>, App $APP_ID, key $APP_KEY"
   echo "run.sh --dry: image $IMAGE from $SANDBOX; container $CONTAINER; volumes $WORKSPACE_VOLUME:/workspace, $CONFIG_VOLUME"
   echo "run.sh --dry: profiles known: ${KNOWN_PROFILES[*]:-none}; chosen: ${CONFIG_ARGS[*]:-none}; agent env: ${AGENT_ENV[*]:-none}"
   printf 'run.sh --dry: container command:'; printf ' %s' "$IMAGE" "${CONFIG_ARGS[@]}" "$@"; echo   # the image, then exactly what the entrypoint receives
+  if [ "$GATEWAY" = 1 ]; then echo "run.sh --dry: gateway $GW_DOMAIN at $(cfg .gateway.address); no token minted; mounts: root.crt, client.crt, client.key, client.token"; fi
   exit 0   # a dry run shows what would run; the tools are the host's to have
 fi
 
@@ -91,7 +123,9 @@ gh_api() { curl -fsS -H "Authorization: Bearer $1" -H "Accept: application/vnd.g
                  -H "X-GitHub-Api-Version: 2022-11-28" "${@:2}"; }
 
 GH_TOKEN=""
-if [ -z "$APP_ID" ] || [ "$APP_ID" = null ]; then
+if [ "$GATEWAY" = 1 ]; then
+  echo "github: through the gateway at $GW_DOMAIN; no token is minted and none enters the container"
+elif [ -z "$APP_ID" ] || [ "$APP_ID" = null ]; then
   echo "github: no App id for $BOT_NAME (set it in the configuration by PR); starting without a credential" >&2
 elif [ ! -r "$APP_KEY" ]; then
   echo "github: App key not readable at $APP_KEY; starting without a credential" >&2
@@ -148,6 +182,7 @@ exec podman run -it --rm \
   -e GIT_AUTHOR_NAME="$BOT_NAME" -e GIT_COMMITTER_NAME="$BOT_NAME" \
   -e GIT_AUTHOR_EMAIL="$BOT_EMAIL" -e GIT_COMMITTER_EMAIL="$BOT_EMAIL" \
   -e GH_TOKEN \
+  "${GW_MOUNTS[@]}" \
   "${AGENT_ENV[@]}" \
   "$IMAGE" "${CONFIG_ARGS[@]}" "$@"
 # The container's command is what was typed after `cocoon`, as typed: `claude`, `claude --continue`,
