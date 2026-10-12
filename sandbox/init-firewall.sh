@@ -40,6 +40,17 @@
 #   launcher does this), restart. A named config (configs/research.hosts) is off by default
 #   and turned on for one session from the host command line: `cocoon claude -- --research`.
 #   Do not add hosts from inside a session; the agent must not widen its own wall.
+#
+# THE GATEWAY SHAPE (a `gateway` section in /etc/cocoon/sandbox.json, mounted by run.sh)
+#   The allowlist is ONE address, the owner's gateway, and GitHub's ranges, the base list and
+#   the named lists are not read at all: everything reaches GitHub, npm and the research hosts
+#   through the gateway's subdomains, which this script maps to that address in /etc/hosts
+#   (no public DNS needed). Port 443 to the address is redirected to the container's relay on
+#   127.0.0.1:8443 (entrypoint.sh starts it): tools that cannot present a client certificate
+#   themselves (gh, npm) talk to the relay, which carries mutual TLS to the gateway on its
+#   port 8443, the one port not redirected. With `model` false the agent's own model hosts
+#   stay allowed directly (the login's token-refresh hosts are not known yet); with it true
+#   the model API goes through the gateway too and the wall is one address.
 # =============================================================================
 
 set -euo pipefail   # Exit on any error, on unset variables, and on failures inside pipes.
@@ -135,12 +146,39 @@ done
 # rule (section 5) can match all of them. hash:net accepts both /32 hosts and ranges.
 ipset create allowed-domains hash:net
 
+# 4g. The gateway shape: read before anything is fetched. One address in the set, the
+#     subdomains mapped to it, the redirect to the relay, and sections 4a and 4b skipped
+#     (4b still reads the agent's own model hosts while `model` is false).
+CFG=/etc/cocoon/sandbox.json
+GATEWAY=0
+if [ -r "$CFG" ] && jq -e '.gateway' "$CFG" >/dev/null 2>&1; then
+    GATEWAY=1
+    GW_ADDR=$(jq -r '.gateway.address' "$CFG")
+    GW_DOMAIN=$(jq -r '.gateway.domain' "$CFG")
+    GW_MODEL=$(jq -r '.gateway.model // false' "$CFG")
+    if [[ ! "$GW_ADDR" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        echo "ERROR: gateway.address '$GW_ADDR' is not an IPv4 address"; exit 1
+    fi
+    echo "Gateway shape: $GW_DOMAIN at $GW_ADDR (model through it: $GW_MODEL)"
+    ipset add -exist allowed-domains "$GW_ADDR"
+    while IFS= read -r name; do
+        [ -n "$name" ] || continue
+        if [[ ! "$name" =~ ^[a-z][a-z0-9-]*$ ]]; then echo "ERROR: gateway upstream name '$name' is not a label"; exit 1; fi
+        echo "$GW_ADDR $name.$GW_DOMAIN" >> /etc/hosts
+        echo "Mapping $name.$GW_DOMAIN to the gateway"
+    done < <(jq -r '.gateway.upstreams[]' "$CFG")
+    # Locally generated packets to the gateway on 443 go to the relay instead (REDIRECT rewrites
+    # the destination to this host's loopback). The relay itself connects to port 8443, untouched.
+    iptables -t nat -A OUTPUT -d "$GW_ADDR" -p tcp --dport 443 -j REDIRECT --to-ports 8443
+fi
+
 # 4a. GitHub publishes its address ranges at api.github.com/meta. We take the
 #     `web`, `api`, and `git` lists (HTTPS to github.com, the REST API, and git over
 #     HTTPS). Every entry is validated as an IPv4 CIDR before it is added; a
 #     surprising value aborts the script and the container start.
 #     `aggregate` merges overlapping/adjacent ranges to keep the set small.
 #     IPv6 entries in the feed are dropped by the regex; IPv6 is blocked wholesale.
+if [ "$GATEWAY" = 0 ]; then
 echo "Fetching GitHub IP ranges..."
 gh_ranges=$(curl -s https://api.github.com/meta)
 if [ -z "$gh_ranges" ]; then
@@ -160,6 +198,7 @@ while read -r cidr; do
     echo "Adding GitHub range $cidr"
     ipset add -exist allowed-domains "$cidr"
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
+fi
 
 # 4b. Named hosts, resolved once now. The lists live in /usr/local/share/cocoon/configs/
 #     (the repo's .devcontainer/configs/), one file per list, one host per line with its
@@ -195,9 +234,16 @@ read_hosts() {
         DOMAINS+=("$host")
     done < "$file"
 }
-read_hosts base
-read_hosts "$AGENT"
-for config in "$@"; do read_hosts "$config"; done
+if [ "$GATEWAY" = 0 ]; then
+    read_hosts base
+    read_hosts "$AGENT"
+    for config in "$@"; do read_hosts "$config"; done
+elif [ "$GW_MODEL" = false ]; then
+    read_hosts "$AGENT"   # the model hosts only, until the model goes through the gateway too
+    [ $# -eq 0 ] || echo "NOTE: profiles (${*}) are ignored in the gateway shape; the research hosts are its subdomains"
+else
+    [ $# -eq 0 ] || echo "NOTE: profiles (${*}) are ignored in the gateway shape; the research hosts are its subdomains"
+fi
 for domain in "${DOMAINS[@]}"; do
     echo "Resolving $domain..."
     ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
@@ -289,8 +335,16 @@ if [ -n "$gw" ] && ! grep -qx "$gw" <<<"$resolvers"; then
     fi
 fi
 
-# Must work: GitHub.
-if ! curl --connect-timeout 5 https://api.github.com/zen >/dev/null 2>&1; then
+# Must work: GitHub directly, or the gateway's port in the gateway shape (a TCP connect; the TLS
+# handshake needs the client certificate the relay holds, so the connect is what this proves).
+if [ "$GATEWAY" = 1 ]; then
+    if timeout 5 bash -c "exec 3<>/dev/tcp/$GW_ADDR/8443" 2>/dev/null; then
+        echo "Firewall verification passed - able to reach the gateway at $GW_ADDR:8443 as expected"
+    else
+        echo "ERROR: Firewall verification failed - unable to reach the gateway at $GW_ADDR:8443"
+        exit 1
+    fi
+elif ! curl --connect-timeout 5 https://api.github.com/zen >/dev/null 2>&1; then
     echo "ERROR: Firewall verification failed - unable to reach https://api.github.com"
     exit 1
 else
