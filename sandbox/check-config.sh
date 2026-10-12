@@ -7,11 +7,12 @@ CONFIG=${1:?config.json}
 command -v jq >/dev/null || { echo "check-config: jq is required" >&2; exit 1; }
 jq -e . "$CONFIG" >/dev/null 2>&1 || { echo "check-config: $CONFIG is not valid JSON" >&2; exit 1; }
 problems=$(jq -r '
+  . as $root |
   def keys_only($allowed): [keys[] | select(. as $k | $allowed | index($k) | not)];
   def req($o; $names): [$names[] | . as $n | select(($o | has($n)) | not)];
   [
     (if .version != 1 then "version must be 1" else empty end),
-    (keys_only(["version","sandbox","command","image","account","workspace","clones","profiles","agents"])[] | "unknown top-level key: " + .),
+    (keys_only(["version","sandbox","command","image","account","workspace","clones","profiles","agents","gateway"])[] | "unknown top-level key: " + .),
     (req(.; ["sandbox","image","account","workspace","agents"])[] | "missing: " + .),
     (if (.sandbox|type) == "object" then
        (.sandbox | keys_only(["repo","ref"])[] | "unknown key in sandbox: " + .),
@@ -28,16 +29,36 @@ problems=$(jq -r '
        (.workspace | keys_only(["repo"])[] | "unknown key in workspace: " + .),
        (req(.workspace; ["repo"])[] | "missing in workspace: " + .)
      else "workspace must be an object" end),
+    (if has("gateway") then
+       (if (.gateway|type) != "object" then "gateway must be an object" else
+          (.gateway | keys_only(["domain","address","upstreams","ca","model"])[] | "unknown key in gateway: " + .),
+          (req(.gateway; ["domain","address","upstreams","ca"])[] | "missing in gateway: " + .),
+          (if (.gateway | has("domain")) and (((.gateway.domain|type) != "string") or ((.gateway.domain | test("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")) | not)) then "gateway.domain must be a hostname" else empty end),
+          (if (.gateway | has("address")) and (((.gateway.address|type) != "string") or ((.gateway.address | test("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$")) | not)) then "gateway.address must be an IPv4 address" else empty end),
+          (if (.gateway | has("upstreams")) and (((.gateway.upstreams|type) != "array") or ((.gateway.upstreams|length) == 0) or ([.gateway.upstreams[] | select((type != "string") or (test("^[a-z][a-z0-9-]*$") | not))] | length) > 0) then "gateway.upstreams must be a non-empty array of lowercase names" else empty end),
+          (if (.gateway | has("ca")) and ((.gateway.ca|type) != "string") then "gateway.ca must be a string" else empty end),
+          (if (.gateway | has("model")) and ((.gateway.model|type) != "boolean") then "gateway.model must be true or false" else empty end)
+        end)
+     else empty end),
     (if has("clones") and ((.clones|type) != "array" or ([.clones[] | select(type != "string")] | length) > 0) then "clones must be an array of strings" else empty end),
     (if has("profiles") and ((.profiles|type) != "array" or ([.profiles[] | select((type != "string") or (test("^[a-z][a-z0-9-]*$") | not))] | length) > 0) then "profiles must be an array of lowercase names" else empty end),
     (if (.agents|type) != "object" or (.agents|length) == 0 then "agents must be an object with at least one agent" else
        (.agents | keys_only(["claude","gemini"])[] | "unknown agent: " + .),
        (.agents | to_entries[] | .key as $a | .value |
-          (keys_only(["app_id","key","bot","bot_id","container","workspace_volume","config_volume","tokens_file","env"])[] | "unknown key in agents." + $a + ": " + .),
+          (keys_only(["app_id","key","bot","bot_id","container","workspace_volume","config_volume","tokens_file","env","gateway"])[] | "unknown key in agents." + $a + ": " + .),
           (req(.; ["app_id","key","bot","bot_id","container","workspace_volume","config_volume"])[] | "missing in agents." + $a + ": " + .),
+          (if ($root | has("gateway")) and (has("gateway") | not) then "agents." + $a + ".gateway is required when gateway is configured (cert, key, token)" else empty end),
+          (if (($root | has("gateway")) | not) and has("gateway") then "agents." + $a + ".gateway is set but no gateway is configured" else empty end),
+          (if has("gateway") then
+             (if (.gateway|type) != "object" then "agents." + $a + ".gateway must be an object" else
+                (.gateway | keys_only(["cert","key","token"])[] | "unknown key in agents." + $a + ".gateway: " + .),
+                (req(.gateway; ["cert","key","token"])[] | "missing in agents." + $a + ".gateway: " + .),
+                ([.gateway[] | select(type != "string")] | if length > 0 then "agents." + $a + ".gateway values must be strings" else empty end)
+              end)
+           else empty end),
           (if has("env") and ((.env|type) != "object" or ([.env[] | select(type != "string")] | length) > 0) then "agents." + $a + ".env must be an object of strings" else empty end))
      end)
   ] | .[]' "$CONFIG" 2>&1); status=$?
 if [ $status -ne 0 ]; then echo "check-config: jq failed: $problems" >&2; exit 1; fi
 if [ -n "$problems" ]; then printf 'check-config: %s\n' "$problems" >&2; exit 1; fi
-echo "check-config: $CONFIG is valid (version 1; agents: $(jq -r '.agents | keys | join(", ")' "$CONFIG"); profiles: $(jq -r '(.profiles // []) | join(", ")' "$CONFIG"))"
+echo "check-config: $CONFIG is valid (version 1; agents: $(jq -r '.agents | keys | join(", ")' "$CONFIG"); profiles: $(jq -r '(.profiles // []) | join(", ")' "$CONFIG"); gateway: $(jq -r 'if .gateway then .gateway.domain + " at " + .gateway.address else "none (the wall is the allowlist)" end' "$CONFIG"))"

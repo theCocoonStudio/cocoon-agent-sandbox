@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "sandbox": {
+    "repo": "theCocoonStudio/cocoon-agent-sandbox",
+    "ref": "main"
+  },
+  "command": {
+    "install": true
+  },
+  "image": "cocoon-ai-sandbox",
+  "account": "theCocoonStudio",
+  "workspace": {
+    "repo": "theCocoonStudio/cocoon-ai"
+  },
+  "clones": [
+    "theCocoonStudio/cocoon-ai-records",
+    "theCocoonStudio/cocoon-ml",
+    "theCocoonStudio/cocoon-relations"
+  ],
+  "profiles": [
+    "research"
+  ],
+  "agents": {
+    "claude": {
+      "app_id": "4819921",
+      "key": "~/cocoon-claude.2026-09-03.private-key.pem",
+      "bot": "cocoon-claude[bot]",
+      "bot_id": "324573615",
+      "container": "cocoon-ai-sandbox",
+      "workspace_volume": "cocoon-ai-workspace",
+      "config_volume": "cocoon-ai-claude-config:/home/node/.claude",
+      "env": {
+        "CLAUDE_CONFIG_DIR": "/home/node/.claude",
+        "DISABLE_AUTOUPDATER": "1",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+      },
+      "gateway": {
+        "cert": "~/.config/cocoon/gateway/claude.crt",
+        "key": "~/.config/cocoon/gateway/claude.key",
+        "token": "~/.config/cocoon/gateway/claude.token"
+      }
+    },
+    "gemini": {
+      "app_id": "5200600",
+      "key": "~/cocoon-gemini.private-key.pem",
+      "bot": "cocoon-gemini[bot]",
+      "bot_id": "338248646",
+      "container": "cocoon-ai-sandbox-gemini",
+      "workspace_volume": "cocoon-ai-workspace-gemini",
+      "config_volume": "cocoon-ai-gemini-config:/home/node/.gemini",
+      "tokens_file": "~/.tokens",
+      "env": {},
+      "gateway": {
+        "cert": "~/.config/cocoon/gateway/gemini.crt",
+        "key": "~/.config/cocoon/gateway/gemini.key",
+        "token": "~/.config/cocoon/gateway/gemini.token"
+      }
+    }
+  },
+  "gateway": {
+    "domain": "gw.thecocoon.studio",
+    "address": "203.0.113.10",
+    "upstreams": [
+      "github",
+      "git",
+      "npm",
+      "anthropic",
+      "arxiv",
+      "export-arxiv"
+    ],
+    "ca": "~/.config/cocoon/gateway/root.crt",
+    "model": false
+  }
+}
