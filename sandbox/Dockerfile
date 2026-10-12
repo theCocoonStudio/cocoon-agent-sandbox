@@ -74,3 +74,6 @@ RUN npm config set ignore-scripts true
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["bash"]
+
+# The relay to the owner's gateway (gateway shape; entrypoint.sh starts it): the one process holding the client certificate.
+COPY gateway-relay.mjs /usr/local/share/cocoon/gateway-relay.mjs
