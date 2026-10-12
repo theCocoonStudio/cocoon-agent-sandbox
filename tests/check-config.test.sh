@@ -25,6 +25,10 @@ if ! { grep -q 'agent claude as cocoon-claude\[bot\] <324573615+cocoon-claude\[b
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json gemini 2>&1)
 if ! { grep -q 'agent gemini as cocoon-gemini\[bot\]' <<< "$out" && grep -q 'cocoon-ai-gemini-config:/home/node/.gemini' <<< "$out"; }; then echo "FAIL: run.sh --dry gemini: $out"; fail=1; fi
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude -- --nope 2>&1); grep -q "unknown profile '--nope'" <<< "$out" || { echo "FAIL: run.sh --dry unknown profile: $out"; fail=1; }
+# the container's command is the typed words once, after the profiles; the agent's name is not added again (2026-10-11:
+# run.sh passed it twice and Claude Code took the second copy as the session's first prompt); no words means the image alone
+out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude --continue -- --research 2>&1); grep -q 'container command: cocoon-ai-sandbox --config research claude --continue$' <<< "$out" || { echo "FAIL: run.sh --dry container command: $out"; fail=1; }
+out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json 2>&1); grep -q 'container command: cocoon-ai-sandbox$' <<< "$out" || { echo "FAIL: run.sh --dry container command without an agent: $out"; fail=1; }
 out=$(HOME="$T" bash host/cocoon-launch.sh --dry 2>&1); grep -q "no configuration at $T/.config/cocoon/sandbox.json" <<< "$out" || { echo "FAIL: launcher without a configuration: $out"; fail=1; }
 out=$(bash host/cocoon-launch.sh --dry "--config=$T/elsewhere.json" 2>&1); grep -q "no configuration at $T/elsewhere.json" <<< "$out" || { echo "FAIL: launcher --config=<path>: $out"; fail=1; }
 out=$(HOME="$T" bash host/cocoon-launch.sh '--config=~/tilde.json' --dry 2>&1); grep -q "no configuration at $T/tilde.json" <<< "$out" || { echo "FAIL: launcher --config=~ expansion: $out"; fail=1; }

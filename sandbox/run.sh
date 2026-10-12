@@ -68,6 +68,7 @@ if [ "$DRY" = 1 ]; then
   echo "run.sh --dry: agent $AGENT as $BOT_NAME <$BOT_EMAIL>, App $APP_ID, key $APP_KEY"
   echo "run.sh --dry: image $IMAGE from $SANDBOX; container $CONTAINER; volumes $WORKSPACE_VOLUME:/workspace, $CONFIG_VOLUME"
   echo "run.sh --dry: profiles known: ${KNOWN_PROFILES[*]:-none}; chosen: ${CONFIG_ARGS[*]:-none}; agent env: ${AGENT_ENV[*]:-none}"
+  printf 'run.sh --dry: container command:'; printf ' %s' "$IMAGE" "${CONFIG_ARGS[@]}" "$@"; echo   # the image, then exactly what the entrypoint receives
   exit 0   # a dry run shows what would run; the tools are the host's to have
 fi
 
@@ -148,4 +149,9 @@ exec podman run -it --rm \
   -e GIT_AUTHOR_EMAIL="$BOT_EMAIL" -e GIT_COMMITTER_EMAIL="$BOT_EMAIL" \
   -e GH_TOKEN \
   "${AGENT_ENV[@]}" \
-  "$IMAGE" "${CONFIG_ARGS[@]}" "$AGENT" "$@"
+  "$IMAGE" "${CONFIG_ARGS[@]}" "$@"
+# The container's command is what was typed after `cocoon`, as typed: `claude`, `claude --continue`,
+# `gemini`, or nothing (the image's CMD, a shell). The agent's name is already the first of those
+# words when one was named, so it is not added again: from the split (2026-10-11, PR 1) to PR 5 this
+# line passed "$AGENT" ahead of "$@", the entrypoint ran `claude claude`, and Claude Code took the
+# second word as the session's first prompt, typed by nobody.
