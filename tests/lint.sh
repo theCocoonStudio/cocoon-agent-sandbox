@@ -25,6 +25,11 @@ for f in "${scripts[@]}"; do
   # (stat -c, tar -C) is outside it and is read by hand
   if grep -nE '(^|&&[[:space:]]*|;[[:space:]]*|\{[[:space:]]*|\|\|[[:space:]]*)[[:space:]]*(mkdir|rm|rmdir|chmod|chown|cp|mv|ln|touch|cat|cmp)( -[A-Za-z0-9]+| [0-7]{3,4}| [0-9]+:[0-9]+)* "\$' "$f"; then echo "lint: $f: a variable path as the first operand without -- before it"; fail=1; fi
   # 2026-09-16, 2026-10-05: git cherry-pick has no -q; the chain ran on past the failed pick
+  # 2026-10-11: an API response read through jq with no check of its shape. A 200 can carry an unexpected
+  # payload, and `jq -r .field` prints "null" for a missing field, which then travels on as a value. The
+  # grep sees the direct form only, curl piped into jq on one line with no `if (`, `select(` or `-e`; a
+  # response held in a variable and read later is checked by hand (the owner, 2026-10-11).
+  if grep -nE 'curl .*\|[[:space:]]*jq ' "$f" | grep -vE 'jq +-[a-zA-Z]*e|if \(|select\('; then echo "lint: $f: an API response read through jq with no check of its shape"; fail=1; fi
   if grep -nE 'cherry-pick +-q' "$f"; then echo "lint: $f: git cherry-pick -q does not exist"; fail=1; fi
   # 2026-10-02, 2026-10-08: a pipeline's status is its last command's, so a failure before the last
   # pipe is invisible; every script turns pipefail on in its first set line (-e is the script's own
