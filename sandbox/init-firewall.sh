@@ -214,6 +214,11 @@ if [ "$GATEWAY" = 1 ]; then
     # Locally generated packets to the gateway on 443 go to the relay instead (REDIRECT rewrites
     # the destination to this host's loopback). The relay itself connects to port 8443, untouched.
     iptables -t nat -A OUTPUT -d "$GW_ADDR" -p tcp --dport 443 -j REDIRECT --to-ports 8443
+    # The redirected packet reaches the filter chain with destination 127.0.0.1:8443; it is accepted here by
+    # address and port, not by `-o lo`: at the first start through the gateway (2026-10-12 02:0x) the loopback
+    # rule did not match it and the final REJECT answered every tool's 443 with "No route to host", while
+    # 8443 direct and 127.0.0.1:8443 connected. Section 7 proves the redirect delivers.
+    iptables -A OUTPUT -d 127.0.0.1 -p tcp --dport 8443 -j ACCEPT
 fi
 
 # 4a. GitHub publishes its address ranges at api.github.com/meta. We take the
@@ -406,6 +411,14 @@ fi
 # Must work: GitHub directly, or the gateway's port in the gateway shape (a TCP connect; the TLS
 # handshake needs the client certificate the relay holds, so the connect is what this proves).
 if [ "$GATEWAY" = 1 ]; then
+    # The redirect must deliver: a connect to the gateway's 443 lands on the relay's loopback port, which
+    # the entrypoint has not opened yet, so the right answer is a refusal from loopback ("Connection
+    # refused"), never the wall's "No route to host".
+    redirect_err=$(timeout 5 bash -c "exec 3<>/dev/tcp/$GW_ADDR/443" 2>&1 || true)
+    case "$redirect_err" in
+        *"Connection refused"*) echo "Firewall verification passed - 443 to the gateway is redirected to the relay's port (refused there until the relay starts)" ;;
+        *) echo "ERROR: Firewall verification failed - 443 to the gateway is not redirected to the relay: ${redirect_err:-connected without a relay}"; exit 1 ;;
+    esac
     if timeout 5 bash -c "exec 3<>/dev/tcp/$GW_ADDR/8443" 2>/dev/null; then
         echo "Firewall verification passed - able to reach the gateway at $GW_ADDR:8443 as expected"
     else
