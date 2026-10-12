@@ -176,19 +176,38 @@ ipset create allowed-domains hash:net
 #     (4b still reads the agent's own model hosts while `model` is false).
 CFG=/etc/cocoon/sandbox.json
 GATEWAY=0
-if [ -r "$CFG" ] && jq -e '.gateway' "$CFG" >/dev/null 2>&1; then
-    GATEWAY=1
+if [ -r "$CFG" ]; then
+    # The host's check-config.sh refused a malformed section before the start. This script does
+    # not lean on that: the mounted file is data, and every value is checked here before it is
+    # used. The earlier form read `.gateway.upstreams[]` straight into the loop, and a missing or
+    # null upstreams passed silently: jq's error inside a process substitution is not an exit
+    # under set -e, so the loop mapped nothing and the start went on with no subdomain.
+    gw_type=$(jq -r 'if has("gateway") then (.gateway | type) else "absent" end' "$CFG")
+    case "$gw_type" in
+        absent) ;;
+        object) GATEWAY=1 ;;
+        *) echo "ERROR: gateway in $CFG must be an object (it is $gw_type)"; exit 1 ;;
+    esac
+fi
+if [ "$GATEWAY" = 1 ]; then
+    if ! jq -e '.gateway.domain | type == "string" and test("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")' "$CFG" >/dev/null; then
+        echo "ERROR: gateway.domain must be a hostname"; exit 1
+    fi
+    if ! jq -e '.gateway.address | type == "string" and test("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$")' "$CFG" >/dev/null; then
+        echo "ERROR: gateway.address must be an IPv4 address"; exit 1
+    fi
+    if ! jq -e '.gateway.upstreams | type == "array" and length > 0 and all(.[]; type == "string" and test("^[a-z][a-z0-9-]*$"))' "$CFG" >/dev/null; then
+        echo "ERROR: gateway.upstreams must be a non-empty array of lowercase names (missing, null and [] refused)"; exit 1
+    fi
+    if ! jq -e '(.gateway.model // false) | type == "boolean"' "$CFG" >/dev/null; then
+        echo "ERROR: gateway.model must be true or false"; exit 1
+    fi
     GW_ADDR=$(jq -r '.gateway.address' "$CFG")
     GW_DOMAIN=$(jq -r '.gateway.domain' "$CFG")
     GW_MODEL=$(jq -r '.gateway.model // false' "$CFG")
-    if [[ ! "$GW_ADDR" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-        echo "ERROR: gateway.address '$GW_ADDR' is not an IPv4 address"; exit 1
-    fi
     echo "Gateway shape: $GW_DOMAIN at $GW_ADDR (model through it: $GW_MODEL)"
     ipset add -exist allowed-domains "$GW_ADDR"
     while IFS= read -r name; do
-        [ -n "$name" ] || continue
-        if [[ ! "$name" =~ ^[a-z][a-z0-9-]*$ ]]; then echo "ERROR: gateway upstream name '$name' is not a label"; exit 1; fi
         echo "$GW_ADDR $name.$GW_DOMAIN" >> /etc/hosts
         echo "Mapping $name.$GW_DOMAIN to the gateway"
     done < <(jq -r '.gateway.upstreams[]' "$CFG")
