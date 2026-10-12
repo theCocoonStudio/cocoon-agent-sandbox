@@ -10,6 +10,9 @@ while [ "${1:-}" = --config ]; do
   CONFIGS+=("$2")
   shift 2
 done
+# Nothing left after the profiles means they replaced the image's CMD (`cocoon -- --research`): the
+# shell, the same command as no arguments at all.
+[ $# -gt 0 ] || set -- bash
 
 # The agent is the container's command (claude, gemini); the firewall allows only that
 # agent's model host. A plain shell gets Claude's hosts.
