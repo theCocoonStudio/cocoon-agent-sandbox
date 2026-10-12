@@ -175,6 +175,7 @@ fi
 exec podman run -it --rm \
   --name "$CONTAINER" \
   --userns=keep-id:uid=1000,gid=1000 \
+  --user 1000:1000 \
   --cap-add NET_ADMIN --cap-add NET_RAW \
   -v "$WORKSPACE_VOLUME:/workspace" \
   -v "$CONFIG_VOLUME" \
@@ -185,6 +186,10 @@ exec podman run -it --rm \
   "${GW_MOUNTS[@]}" \
   "${AGENT_ENV[@]}" \
   "$IMAGE" "${CONFIG_ARGS[@]}" "$@"
+# The user is named here, 1000:1000 (the image's `node`), and not left to the image's USER line
+# alone: a setting whose one line, removed, would widen the container (root inside) is stated at
+# the outer level too, so a change to the image cannot change it unnoticed (the owner's rule,
+# 2026-10-11: configs that could leak if a line is removed go to the higher level).
 # The container's command is what was typed after `cocoon`, as typed: `claude`, `claude --continue`,
 # `gemini`, or nothing (the image's CMD, a shell). The agent's name is already the first of those
 # words when one was named, so it is not added again: from the split (2026-10-11, PR 1) to PR 5 this
