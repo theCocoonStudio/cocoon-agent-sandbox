@@ -299,9 +299,10 @@ iptables -P OUTPUT  DROP
 
 # Replies to connections we opened (TCP handshakes, DNS answers, ICMP errors for
 # our own packets) are allowed via connection tracking. This is what lets DNS
-# answers in now that the blanket sport-53 rule is gone.
-iptables -A INPUT  -m state --state ESTABLISHED,RELATED -j ACCEPT
-iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+# answers in now that the blanket sport-53 rule is gone. The match is conntrack,
+# the module that does the tracking; `-m state` is its legacy alias and is not used.
+iptables -A INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
 # The allowlist. Any protocol/port to these destinations; the destinations are the
 # constraint. Section 3 has already rejected private ranges so nothing here can
