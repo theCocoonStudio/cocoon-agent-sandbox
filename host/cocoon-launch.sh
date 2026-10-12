@@ -105,7 +105,11 @@ trap 'rm -rf "${tmp:?}"' EXIT
 # unpacked only as far as $3. Public repos: no credential; the download follows GitHub's redirect.
 fetch() { # fetch <owner/repo> <ref> <path within the repo> -> prints <dir of the unpacked path>
   local slug=$1 ref=$2 path=$3 sha top
-  sha=$(curl -fsSL -H "Accept: application/vnd.github+json" "$API/$slug/commits/$ref" | jq -r .sha)
+  # A 200 is not trusted to carry a commit: the sha is taken only if it is a 40-digit hex string, and
+  # checked again after the pipe (an empty answer would make the tarball URL the default branch's).
+  sha=$(curl -fsSL -H "Accept: application/vnd.github+json" "$API/$slug/commits/$ref" \
+        | jq -r 'if (.sha | type == "string" and test("^[0-9a-f]{40}$")) then .sha else error("no commit sha in the response") end')
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "launcher: $slug@$ref: the commit lookup did not return a commit sha" >&2; exit 1; }
   curl -fsSL "$API/$slug/tarball/$sha" -o "$tmp/$sha.tgz"
   top=$(tar -tzf "$tmp/$sha.tgz" | awk -F/ 'NR == 1 { print $1 }')   # <owner>-<repo>-<sha7>; awk reads to the end, so pipefail stays quiet
   case "$sha" in "${top##*-}"*) ;; *) echo "launcher: archive $top does not match commit $sha" >&2; exit 1 ;; esac

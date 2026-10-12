@@ -224,13 +224,17 @@ fi
 #     IPv6 entries in the feed are dropped by the regex; IPv6 is blocked wholesale.
 if [ "$GATEWAY" = 0 ]; then
 echo "Fetching GitHub IP ranges..."
-gh_ranges=$(curl -s https://api.github.com/meta)
+# -f: an HTTP error is a failure, not a body to parse. The 200 is not trusted either: web, api and
+# git must each be a non-empty array of strings before anything is read out of them (a jq error
+# inside the process substitution below would otherwise add no range and go unnoticed until the
+# self-test).
+gh_ranges=$(curl -fsS https://api.github.com/meta) || { echo "ERROR: Failed to fetch GitHub IP ranges (curl exit $?)"; exit 1; }
 if [ -z "$gh_ranges" ]; then
-    echo "ERROR: Failed to fetch GitHub IP ranges"
+    echo "ERROR: Failed to fetch GitHub IP ranges (empty answer)"
     exit 1
 fi
-if ! echo "$gh_ranges" | jq -e '.web and .api and .git' >/dev/null; then
-    echo "ERROR: GitHub API response missing required fields"
+if ! echo "$gh_ranges" | jq -e '[.web, .api, .git] | all(type == "array" and length > 0 and all(.[]; type == "string"))' >/dev/null 2>&1; then
+    echo "ERROR: GitHub meta response: web, api and git must each be a non-empty array of strings"
     exit 1
 fi
 echo "Processing GitHub IPs..."
