@@ -141,14 +141,19 @@ else
   jwt="$header.$payload.$sig"
 
   # The installation of this App on the configured account, then a token for it.
+  # The API's 200s are not trusted to carry the fields: each value is checked for its shape before it is
+  # used, since `jq -r .field` prints "null" for a missing one and that string would travel on as a value.
   inst=$(gh_api "$jwt" "$API/app/installations" \
-         | jq -r --arg a "$APP_ACCOUNT" '.[] | select(.account.login == $a) | .id' | head -1)
-  [ -n "$inst" ] || { echo "github: App $APP_ID has no installation on $APP_ACCOUNT" >&2; exit 1; }
+         | jq -r --arg a "$APP_ACCOUNT" '[.[] | select((.account.login? // "") == $a) | .id | select(type == "number")] | first // empty')
+  [[ "$inst" =~ ^[0-9]+$ ]] || { echo "github: App $APP_ID has no installation on $APP_ACCOUNT (no numeric installation id in the API's answer)" >&2; exit 1; }
   resp=$(gh_api "$jwt" -X POST "$API/app/installations/$inst/access_tokens")
-  GH_TOKEN=$(printf '%s' "$resp" | jq -r .token)
-  echo "github: installation token minted for $APP_ACCOUNT as $BOT_NAME, expires $(printf '%s' "$resp" | jq -r .expires_at)"
-  echo "github: repos: $(printf '%s' "$resp" | jq -r '.repository_selection')"
-  unset jwt sig payload header resp
+  GH_TOKEN=$(printf '%s' "$resp" | jq -r 'if (.token | type == "string" and length > 0) then .token else error("no token string in the response") end')
+  [ -n "$GH_TOKEN" ] || { echo "github: the token response carried no token string; not starting" >&2; exit 1; }
+  expires=$(printf '%s' "$resp" | jq -r 'if (.expires_at | type == "string" and length > 0) then .expires_at else error("no expires_at in the response") end')
+  [ -n "$expires" ] || { echo "github: the token response carried no expires_at; not starting" >&2; exit 1; }
+  echo "github: installation token minted for $APP_ACCOUNT as $BOT_NAME, expires $expires"
+  echo "github: repos: $(printf '%s' "$resp" | jq -r '.repository_selection // "unstated"')"
+  unset jwt sig payload header resp expires
 fi
 export GH_TOKEN   # read by podman via `-e GH_TOKEN` below; the value is never on a command line
 
