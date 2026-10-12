@@ -41,7 +41,7 @@ if [ -r "$CFG" ] && jq -e '.gateway' "$CFG" >/dev/null 2>&1; then
   GW_MODEL=$(jq -r '.gateway.model // false' "$CFG")
   GW_DIR=/etc/cocoon/gateway
   RELAY=/tmp/cocoon-relay
-  rm -rf "${RELAY:?}" && mkdir -m 700 "$RELAY"
+  rm -rf -- "${RELAY:?}" && mkdir -m 700 -- "$RELAY"
   openssl ecparam -name prime256v1 -genkey -noout -out "$RELAY/ca.key"
   openssl req -x509 -new -key "$RELAY/ca.key" -sha256 -days 2 -subj "/CN=cocoon relay CA (this container only)" \
     -config <(printf '[req]\ndistinguished_name=dn\n[dn]\n[v3]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign\n') -extensions v3 -out "$RELAY/ca.crt" 2>/dev/null
@@ -49,13 +49,13 @@ if [ -r "$CFG" ] && jq -e '.gateway' "$CFG" >/dev/null 2>&1; then
   openssl req -new -key "$RELAY/leaf.key" -subj "/CN=relay.$GW_DOMAIN" -out "$RELAY/leaf.csr" 2>/dev/null
   openssl x509 -req -in "$RELAY/leaf.csr" -CA "$RELAY/ca.crt" -CAkey "$RELAY/ca.key" -CAcreateserial -sha256 -days 2 \
     -extfile <(printf 'basicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:*.%s\n' "$GW_DOMAIN") -out "$RELAY/leaf.crt" 2>/dev/null
-  rm -f "$RELAY/ca.key" "$RELAY/leaf.csr" "$RELAY/ca.srl"
+  rm -f -- "$RELAY/ca.key" "$RELAY/leaf.csr" "$RELAY/ca.srl"
   node /usr/local/share/cocoon/gateway-relay.mjs "$RELAY" "$GW_DIR" "$GW_ADDR" "$GW_DOMAIN" > "$RELAY/relay.log" 2>&1 &
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     if timeout 1 bash -c 'exec 3<>/dev/tcp/127.0.0.1/8443' 2>/dev/null; then break; fi
     sleep 0.5
   done
-  timeout 1 bash -c 'exec 3<>/dev/tcp/127.0.0.1/8443' 2>/dev/null || { echo "gateway: the relay did not start; $RELAY/relay.log:"; cat "$RELAY/relay.log"; exit 1; }
+  timeout 1 bash -c 'exec 3<>/dev/tcp/127.0.0.1/8443' 2>/dev/null || { echo "gateway: the relay did not start; $RELAY/relay.log:"; cat -- "$RELAY/relay.log"; exit 1; }
   export SSL_CERT_FILE="$RELAY/ca.crt" CURL_CA_BUNDLE="$RELAY/ca.crt" NODE_EXTRA_CA_CERTS="$RELAY/ca.crt" REQUESTS_CA_BUNDLE="$RELAY/ca.crt"
   export GH_HOST="github.$GW_DOMAIN" GH_ENTERPRISE_TOKEN=through-the-gateway
   git config --global "url.https://git.$GW_DOMAIN/.insteadOf" "https://github.com/"

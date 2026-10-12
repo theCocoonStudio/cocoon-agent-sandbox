@@ -19,6 +19,11 @@ for f in "${scripts[@]}"; do
   [ "$f" = tests/lint.sh ] && continue
   # 2026-10-11: a recursive delete on a variable path that can collapse to / (the guardrail's catch)
   if grep -nE 'rm -r[f]? +"?\$[A-Za-z_{][^:?}]*[/"]' "$f" | grep -vE '\$\{[A-Za-z_]+:\?' ; then echo "lint: $f: rm -r on a variable path without \${var:?}"; fail=1; fi
+  # 2026-10-11: a file command whose first operand is a variable path with no -- before it, so a value
+  # beginning with a dash would be read as an option (Izzy: mkdir -p -- "$dir"); the grep covers the
+  # plain forms (options, a mode or an owner, then the quoted variable); an option that takes a value
+  # (stat -c, tar -C) is outside it and is read by hand
+  if grep -nE '(^|&&[[:space:]]*|;[[:space:]]*|\{[[:space:]]*|\|\|[[:space:]]*)[[:space:]]*(mkdir|rm|rmdir|chmod|chown|cp|mv|ln|touch|cat|cmp)( -[A-Za-z0-9]+| [0-7]{3,4}| [0-9]+:[0-9]+)* "\$' "$f"; then echo "lint: $f: a variable path as the first operand without -- before it"; fail=1; fi
   # 2026-09-16, 2026-10-05: git cherry-pick has no -q; the chain ran on past the failed pick
   if grep -nE 'cherry-pick +-q' "$f"; then echo "lint: $f: git cherry-pick -q does not exist"; fail=1; fi
   # 2026-10-02, 2026-10-08: a pipeline's status is its last command's, so a failure before the last
