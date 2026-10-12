@@ -44,7 +44,7 @@ jq '.agents.claude.gateway.extra = "x"' "$G" > "$T/gw6.json"; expect fail "$T/gw
 mkdir -p "$T/gw"; for f in root.crt claude.crt claude.key claude.token; do echo x > "$T/gw/$f"; done; chmod 600 "$T/gw/claude.key" "$T/gw/claude.token"
 jq --arg d "$T/gw" '.gateway.ca = $d + "/root.crt" | .agents.claude.gateway = {cert: ($d + "/claude.crt"), key: ($d + "/claude.key"), token: ($d + "/claude.token")}' "$G" > "$T/gwdry.json"
 out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1)
-if ! { grep -q 'gateway gw.thecocoon.studio at 203.0.113.10; no token minted; mounts: root.crt, client.crt, client.key, client.token' <<< "$out" && grep -q 'container command: cocoon-ai-sandbox claude$' <<< "$out"; }; then echo "FAIL: run.sh --dry with a gateway: $out"; fail=1; fi
+if ! { grep -q "gateway gw.thecocoon.studio at $(jq -r .gateway.address "$G"); no token minted; mounts: root.crt, client.crt, client.key, client.token" <<< "$out" && grep -q 'container command: cocoon-ai-sandbox claude$' <<< "$out"; }; then echo "FAIL: run.sh --dry with a gateway: $out"; fail=1; fi
 grep -q 'WARNING' <<< "$out" && { echo "FAIL: run.sh --dry with a gateway warned at mode 600: $out"; fail=1; }
 chmod 644 "$T/gw/claude.key"; out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1); grep -q "WARNING $T/gw/claude.key has mode 644" <<< "$out" || { echo "FAIL: run.sh --dry gateway key mode: $out"; fail=1; }
 rm -f "${T:?}/gw/claude.token"; out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1); grep -q "gateway file not readable: $T/gw/claude.token" <<< "$out" || { echo "FAIL: run.sh --dry gateway missing file: $out"; fail=1; }
