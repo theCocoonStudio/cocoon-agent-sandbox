@@ -338,8 +338,11 @@ iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
 # The allowlist is IPv4-only, so any IPv6 route would be an unfiltered bypass.
 # Today the container has only a link-local v6 address and no default v6 route,
 # but that is a property of the host, not of this script, so drop v6 regardless.
-# ip6tables may be unavailable if the kernel lacks v6 netfilter; warn, don't fail,
-# since in that case there is no v6 stack to leak through either.
+# ip6tables may be unavailable if the kernel lacks v6 netfilter. Then the start goes on only
+# if this namespace verifiably has no IPv6 to leak through: no global address and no default
+# route, read with `ip -6` (a link-local fe80:: address alone reaches nothing past the
+# segment). A namespace with either and no ip6tables aborts the start: better no session
+# than an unfiltered stack. Section 7 then proves the result whichever path was taken.
 if ip6tables -P OUTPUT DROP 2>/dev/null; then
     ip6tables -F
     ip6tables -P INPUT   DROP
@@ -349,7 +352,13 @@ if ip6tables -P OUTPUT DROP 2>/dev/null; then
     ip6tables -A OUTPUT -o lo -j ACCEPT
     echo "IPv6: all traffic dropped except loopback"
 else
-    echo "WARNING: ip6tables unavailable; IPv6 not filtered (no v6 stack expected)"
+    v6_global=$(ip -6 addr show scope global 2>/dev/null | grep -c inet6 || true)
+    v6_default=$(ip -6 route show default 2>/dev/null | grep -c . || true)
+    if [ "$v6_global" != 0 ] || [ "$v6_default" != 0 ]; then
+        echo "ERROR: ip6tables unavailable and IPv6 is routable here ($v6_global global addresses, $v6_default default routes); refusing to start unfiltered"
+        exit 1
+    fi
+    echo "WARNING: ip6tables unavailable; no global IPv6 address and no IPv6 default route, so nothing to filter (proved below)"
 fi
 
 # -----------------------------------------------------------------------------
@@ -366,6 +375,16 @@ if curl --connect-timeout 5 https://example.com >/dev/null 2>&1; then
     exit 1
 else
     echo "Firewall verification passed - unable to reach https://example.com as expected"
+fi
+
+# Must be blocked: the same site over IPv6, whichever path section 6 took (the policies, or
+# no stack to filter). curl -6 resolves the AAAA record over the allowed resolver and
+# connects over IPv6 only; any failure to connect is the pass.
+if curl -6 --connect-timeout 5 https://example.com >/dev/null 2>&1; then
+    echo "ERROR: Firewall verification failed - was able to reach https://example.com over IPv6"
+    exit 1
+else
+    echo "Firewall verification passed - unable to reach https://example.com over IPv6 as expected"
 fi
 
 # Must be blocked: the LAN default gateway, on the port DNS uses. This is the
