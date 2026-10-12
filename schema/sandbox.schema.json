@@ -5,34 +5,221 @@
   "description": "One file on the host, ~/.config/cocoon/sandbox.json, placed and edited by hand; never a repository's. Nothing is read from the environment; unknown keys are refused; an empty profile is the strictest container.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "sandbox", "image", "account", "workspace", "agents"],
+  "required": [
+    "version",
+    "sandbox",
+    "image",
+    "account",
+    "workspace",
+    "agents"
+  ],
   "properties": {
-    "version": { "const": 1 },
-    "sandbox": { "type": "object", "additionalProperties": false, "required": ["repo", "ref"],
-      "properties": { "repo": { "type": "string", "description": "owner/repo of this library" }, "ref": { "type": "string", "description": "the tag or branch the launcher downloads and runs; pin a tag" } } },
-    "command": { "type": "object", "additionalProperties": false,
-      "properties": { "install": { "type": "boolean", "default": false, "description": "put the launcher on the PATH as `cocoon` when run from elsewhere (a fresh download); the installed copy never rewrites itself" }, "bin": { "type": "string", "description": "the directory to install into; absent: Linux ~/.local/bin; macOS Homebrew's prefix for the architecture when writable, else refused" } } },
-    "image": { "type": "string", "description": "the podman image name built from sandbox/" },
-    "account": { "type": "string", "description": "the GitHub account the agents' Apps are installed on" },
-    "workspace": { "type": "object", "additionalProperties": false, "required": ["repo"],
-      "properties": { "repo": { "type": "string", "description": "owner/repo cloned into the workspace volume on first start" } } },
-    "clones": { "type": "array", "items": { "type": "string" }, "default": [], "description": "owner/repo cloned beside the workspace on first start, ephemeral" },
-    "profiles": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }, "default": [], "description": "named hosts lists (sandbox/configs/<name>.hosts) the host user may turn on for one session with `-- --<name>`" },
-    "agents": { "type": "object", "minProperties": 1, "additionalProperties": false,
-      "properties": { "claude": { "$ref": "#/$defs/agent" }, "gemini": { "$ref": "#/$defs/agent" } } }
+    "version": {
+      "const": 1
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repo",
+        "ref"
+      ],
+      "properties": {
+        "repo": {
+          "type": "string",
+          "description": "owner/repo of this library"
+        },
+        "ref": {
+          "type": "string",
+          "description": "the tag or branch the launcher downloads and runs; pin a tag"
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "install": {
+          "type": "boolean",
+          "default": false,
+          "description": "put the launcher on the PATH as `cocoon` when run from elsewhere (a fresh download); the installed copy never rewrites itself"
+        },
+        "bin": {
+          "type": "string",
+          "description": "the directory to install into; absent: Linux ~/.local/bin; macOS Homebrew's prefix for the architecture when writable, else refused"
+        }
+      }
+    },
+    "image": {
+      "type": "string",
+      "description": "the podman image name built from sandbox/"
+    },
+    "account": {
+      "type": "string",
+      "description": "the GitHub account the agents' Apps are installed on"
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repo"
+      ],
+      "properties": {
+        "repo": {
+          "type": "string",
+          "description": "owner/repo cloned into the workspace volume on first start"
+        }
+      }
+    },
+    "clones": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "owner/repo cloned beside the workspace on first start, ephemeral"
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "default": [],
+      "description": "named hosts lists (sandbox/configs/<name>.hosts) the host user may turn on for one session with `-- --<name>`"
+    },
+    "agents": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "claude": {
+          "$ref": "#/$defs/agent"
+        },
+        "gemini": {
+          "$ref": "#/$defs/agent"
+        }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "address",
+        "upstreams",
+        "ca"
+      ],
+      "description": "present: the wall allows the gateway's address alone and every tool reaches GitHub, npm and the research hosts through its subdomains; no App token is minted and none enters the container",
+      "properties": {
+        "domain": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$",
+          "description": "the parent of the gateway's subdomains, e.g. gw.thecocoon.studio"
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){3}$",
+          "description": "the gateway's IPv4 address: the one host in the wall; the subdomains resolve to it inside the container"
+        },
+        "upstreams": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "description": "the subdomain names, the keys of the gateway's config/upstreams.json (github, git, npm, anthropic, arxiv, export-arxiv)"
+        },
+        "ca": {
+          "type": "string",
+          "description": "host path of the private root's public half (root.crt from certs.sh); the container trusts it and nothing else for the gateway"
+        },
+        "model": {
+          "type": "boolean",
+          "default": false,
+          "description": "route the agent's model API through the gateway's anthropic subdomain; off until the login's token-refresh hosts are known, so the agent's own model hosts stay allowed directly"
+        }
+      }
+    }
   },
   "$defs": {
-    "agent": { "type": "object", "additionalProperties": false, "required": ["app_id", "key", "bot", "bot_id", "container", "workspace_volume", "config_volume"],
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "app_id",
+        "key",
+        "bot",
+        "bot_id",
+        "container",
+        "workspace_volume",
+        "config_volume"
+      ],
       "properties": {
-        "app_id": { "type": "string", "description": "the GitHub App that is this agent's identity" },
-        "key": { "type": "string", "description": "host path of the App's private key, mode 600; never mounted" },
-        "bot": { "type": "string", "description": "the App's bot user, <slug>[bot]" },
-        "bot_id": { "type": "string", "description": "the bot user's numeric id, for the no-reply email" },
-        "container": { "type": "string" },
-        "workspace_volume": { "type": "string" },
-        "config_volume": { "type": "string", "description": "<volume>:<path in the container> for the agent's own state" },
-        "tokens_file": { "type": "string", "description": "host path of a mode-600 file with one KEY=value line the agent needs (read, never sourced)" },
-        "env": { "type": "object", "additionalProperties": { "type": "string" }, "default": {}, "description": "environment set in the container for this agent, each line a reviewed decision" }
-      } }
+        "app_id": {
+          "type": "string",
+          "description": "the GitHub App that is this agent's identity"
+        },
+        "key": {
+          "type": "string",
+          "description": "host path of the App's private key, mode 600; never mounted"
+        },
+        "bot": {
+          "type": "string",
+          "description": "the App's bot user, <slug>[bot]"
+        },
+        "bot_id": {
+          "type": "string",
+          "description": "the bot user's numeric id, for the no-reply email"
+        },
+        "container": {
+          "type": "string"
+        },
+        "workspace_volume": {
+          "type": "string"
+        },
+        "config_volume": {
+          "type": "string",
+          "description": "<volume>:<path in the container> for the agent's own state"
+        },
+        "tokens_file": {
+          "type": "string",
+          "description": "host path of a mode-600 file with one KEY=value line the agent needs (read, never sourced)"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "environment set in the container for this agent, each line a reviewed decision"
+        },
+        "gateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cert",
+            "key",
+            "token"
+          ],
+          "description": "this agent's client identity at the gateway (certs.sh client <dir> <role>): required when the top-level gateway is present, refused otherwise",
+          "properties": {
+            "cert": {
+              "type": "string",
+              "description": "host path of <role>.crt; the common name is the role"
+            },
+            "key": {
+              "type": "string",
+              "description": "host path of <role>.key, mode 600; mounted read-only, read by the relay only"
+            },
+            "token": {
+              "type": "string",
+              "description": "host path of <role>.token, mode 600, one line: the role's bearer token the relay adds as Proxy-Authorization"
+            }
+          }
+        }
+      }
+    }
   }
 }
