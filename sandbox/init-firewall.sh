@@ -56,6 +56,31 @@
 set -euo pipefail   # Exit on any error, on unset variables, and on failures inside pipes.
 IFS=$'\n\t'         # Word-split only on newlines and tabs, never on spaces.
 
+# The tools this script needs, declared once and checked before the first rule, as every script
+# in this repository does. Every missing one is named in one line, so an image that lacks two
+# says so once; a container never starts with a half-built wall.
+TOOLS=(
+    iptables    # the rules
+    ip6tables   # the IPv6 policies (section 6)
+    ipset       # the allowlist set
+    jq          # the configuration and GitHub's meta JSON
+    curl        # GitHub's meta endpoint and the self-test
+    aggregate   # merges GitHub's ranges (section 4a)
+    dig         # resolves the named hosts (section 4b) and probes the LAN gateway (section 7)
+    awk         # reads resolv.conf and dig's answers
+    ip          # the default route (section 7) and the IPv6 state (section 6)
+    timeout     # bounds the gateway connect in the self-test
+    grep        # the resolver check in the self-test
+)
+missing=()
+for tool in "${TOOLS[@]}"; do
+    command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+    echo "ERROR: init-firewall.sh needs tools the image lacks: $(printf '%s ' "${missing[@]}")"
+    exit 1
+fi
+
 # -----------------------------------------------------------------------------
 # 1. Start from a clean slate
 # -----------------------------------------------------------------------------
