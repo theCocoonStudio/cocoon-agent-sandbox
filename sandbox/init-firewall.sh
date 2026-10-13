@@ -48,9 +48,10 @@
 #   (no public DNS needed). Port 443 to the address is redirected to the container's relay on
 #   127.0.0.1:8443 (entrypoint.sh starts it): tools that cannot present a client certificate
 #   themselves (gh, npm) talk to the relay, which carries mutual TLS to the gateway on its
-#   port 8443, the one port not redirected. With `model` false the agent's own model hosts
-#   stay allowed directly (the login's token-refresh hosts are not known yet); with it true
-#   the model API goes through the gateway too and the wall is one address.
+#   port 8443, the one port not redirected. With `model` false the agent's own model host
+#   stays allowed directly; with it true the model API goes through the gateway too. The
+#   agent's login hosts (<agent>-login.hosts) stay allowed directly in both shapes: the login's
+#   token refresh goes to them and does not follow ANTHROPIC_BASE_URL.
 # =============================================================================
 
 set -euo pipefail   # Exit on any error, on unset variables, and on failures inside pipes.
@@ -257,7 +258,8 @@ fi
 #     (the repo's .devcontainer/configs/), one file per list, one host per line with its
 #     purpose beside it, so the whole allowlist can be inspected in one place:
 #       base.hosts        every container
-#       <agent>.hosts     the agent's own model and login hosts; each container gets only its own
+#       <agent>.hosts     the agent's own model host; each container gets only its own
+#       <agent>-login.hosts the agent's login and token-refresh hosts, read in every shape (empty for an API-key agent)
 #       <config>.hosts    a named config the host user turns on for one session, e.g. research;
 #                         off by default, chosen on the host command line, never from inside
 #     Arguments: $1 the agent (claude or gemini), $2.. the configs. A missing file is an error,
@@ -287,14 +289,18 @@ read_hosts() {
         DOMAINS+=("$host")
     done < "$file"
 }
+# The agent's login hosts (<agent>-login.hosts) are read in every shape: the login's token refresh goes to them
+# and does not follow ANTHROPIC_BASE_URL, so a wall without them ends the session when the token expires
+# (the first start with gateway.model true, 2026-10-13). The model host (<agent>.hosts) is read until the
+# model goes through the gateway (gateway.model true), and not after.
 if [ "$GATEWAY" = 0 ]; then
     read_hosts base
     read_hosts "$AGENT"
+    read_hosts "$AGENT-login"
     for config in "$@"; do read_hosts "$config"; done
-elif [ "$GW_MODEL" = false ]; then
-    read_hosts "$AGENT"   # the model hosts only, until the model goes through the gateway too
-    [ $# -eq 0 ] || echo "NOTE: profiles (${*}) are ignored in the gateway shape; the research hosts are its subdomains"
 else
+    [ "$GW_MODEL" = true ] || read_hosts "$AGENT"   # the model host, until the model goes through the gateway too
+    read_hosts "$AGENT-login"
     [ $# -eq 0 ] || echo "NOTE: profiles (${*}) are ignored in the gateway shape; the research hosts are its subdomains"
 fi
 for domain in "${DOMAINS[@]}"; do

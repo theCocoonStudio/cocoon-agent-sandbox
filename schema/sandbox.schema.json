@@ -138,7 +138,7 @@
         "model": {
           "type": "boolean",
           "default": false,
-          "description": "route the agent's model API through the gateway's anthropic subdomain; off until the login's token-refresh hosts are known, so the agent's own model hosts stay allowed directly"
+          "description": "route the agent's model API through the gateway's anthropic subdomain (ANTHROPIC_BASE_URL); the agent's login hosts (<agent>-login.hosts) stay allowed directly in every shape, since the login's token refresh does not follow that variable"
         }
       }
     }

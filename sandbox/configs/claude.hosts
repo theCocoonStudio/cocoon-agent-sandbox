@@ -1,6 +1,5 @@
-# Claude's model and login hosts. Telemetry hosts are deliberately absent (Sentry,
-# Statsig; CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 in run.sh stops it trying).
+# Claude's model host. The login hosts are in claude-login.hosts (read beside this list in every
+# shape); telemetry hosts are deliberately absent (Sentry, Statsig;
+# CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 in run.sh stops it trying). In the gateway shape with
+# gateway.model true this list is not read: the model goes through the gateway's anthropic subdomain.
 api.anthropic.com     # the Claude model API
-claude.ai             # OAuth login flow
-platform.claude.com   # OAuth login flow / console
-console.anthropic.com # OAuth login flow / console

@@ -1,0 +1,9 @@
+# Claude Code's login hosts: the OAuth flow and the token refresh (the login's access token expires
+# and the CLI renews it at these hosts, not at the model API). They stay reachable directly in every
+# shape, the gateway shape with gateway.model true included: ANTHROPIC_BASE_URL moves the model calls
+# to the gateway's anthropic subdomain, and the refresh does not follow that variable (verified
+# 2026-10-13: the first start with model true blocked them, and the token would have expired at
+# 22:06 with no way to renew). Telemetry hosts are deliberately absent.
+claude.ai             # OAuth login flow
+platform.claude.com   # OAuth login flow / console; the token refresh
+console.anthropic.com # OAuth login flow / console
