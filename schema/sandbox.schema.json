@@ -115,12 +115,12 @@
         "domain": {
           "type": "string",
           "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$",
-          "description": "the parent of the gateway's subdomains, e.g. gw.thecocoon.studio"
+          "description": "the parent of the gateway's subdomains, e.g. gw.example.com"
         },
         "address": {
           "type": "string",
           "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){3}$",
-          "description": "the gateway's IPv4 address: the one host in the wall; the subdomains resolve to it inside the container"
+          "description": "the gateway's IPv4 address: the one host in the wall; the subdomains resolve to it inside the container (the example carries 203.0.113.10, a documentation address; the real one lives in the sandbox configuration on the box only)"
         },
         "upstreams": {
           "type": "array",

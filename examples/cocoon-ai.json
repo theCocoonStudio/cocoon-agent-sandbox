@@ -1,31 +1,46 @@
 {
   "version": 1,
-  "sandbox": { "repo": "theCocoonStudio/cocoon-agent-sandbox", "ref": "main" },
-  "command": { "install": true },
-  "image": "cocoon-ai-sandbox",
-  "account": "theCocoonStudio",
-  "workspace": { "repo": "theCocoonStudio/cocoon-ai" },
-  "clones": ["theCocoonStudio/cocoon-ai-records", "theCocoonStudio/cocoon-ml", "theCocoonStudio/cocoon-relations"],
-  "profiles": ["research"],
+  "sandbox": {
+    "repo": "theCocoonStudio/cocoon-agent-sandbox",
+    "ref": "main"
+  },
+  "command": {
+    "install": true
+  },
+  "image": "example-sandbox",
+  "account": "example-org",
+  "workspace": {
+    "repo": "example-org/example-app"
+  },
+  "clones": [
+    "example-org/example-notes"
+  ],
+  "profiles": [
+    "research"
+  ],
   "agents": {
     "claude": {
-      "app_id": "4819921",
-      "key": "~/cocoon-claude.2026-09-03.private-key.pem",
-      "bot": "cocoon-claude[bot]",
-      "bot_id": "324573615",
-      "container": "cocoon-ai-sandbox",
-      "workspace_volume": "cocoon-ai-workspace",
-      "config_volume": "cocoon-ai-claude-config:/home/node/.claude",
-      "env": { "CLAUDE_CONFIG_DIR": "/home/node/.claude", "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1" }
+      "app_id": "100001",
+      "key": "~/example-claude.private-key.pem",
+      "bot": "example-claude[bot]",
+      "bot_id": "200001",
+      "container": "example-sandbox",
+      "workspace_volume": "example-workspace",
+      "config_volume": "example-claude-config:/home/node/.claude",
+      "env": {
+        "CLAUDE_CONFIG_DIR": "/home/node/.claude",
+        "DISABLE_AUTOUPDATER": "1",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+      }
     },
     "gemini": {
-      "app_id": "5200600",
-      "key": "~/cocoon-gemini.private-key.pem",
-      "bot": "cocoon-gemini[bot]",
-      "bot_id": "338248646",
-      "container": "cocoon-ai-sandbox-gemini",
-      "workspace_volume": "cocoon-ai-workspace-gemini",
-      "config_volume": "cocoon-ai-gemini-config:/home/node/.gemini",
+      "app_id": "100002",
+      "key": "~/example-gemini.private-key.pem",
+      "bot": "example-gemini[bot]",
+      "bot_id": "200002",
+      "container": "example-sandbox-gemini",
+      "workspace_volume": "example-workspace-gemini",
+      "config_volume": "example-gemini-config:/home/node/.gemini",
       "tokens_file": "~/.tokens",
       "env": {}
     }
