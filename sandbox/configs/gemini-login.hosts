@@ -1,0 +1,2 @@
+# Gemini CLI authenticates with an API key (tokens_file in the configuration), so it has no login
+# hosts; the list exists because every agent's login list is read, and a missing list is an error.
