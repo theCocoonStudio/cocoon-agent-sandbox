@@ -21,14 +21,14 @@ jq '.command.path = "/x"' examples/cocoon-ai.json > "$T/cmd2.json"; expect fail 
 jq 'del(.command)' examples/cocoon-ai.json > "$T/cmd3.json"; expect pass "$T/cmd3.json" ""
 echo "not json" > "$T/bad.json"; expect fail "$T/bad.json" "not valid JSON"
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude -- --research 2>&1)
-if ! { grep -q 'agent claude as cocoon-claude\[bot\] <324573615+cocoon-claude\[bot\]@users.noreply.github.com>, App 4819921' <<< "$out" && grep -q 'chosen: --config research' <<< "$out"; }; then echo "FAIL: run.sh --dry claude: $out"; fail=1; fi
+if ! { grep -q 'agent claude as example-claude\[bot\] <200001+example-claude\[bot\]@users.noreply.github.com>, App 100001' <<< "$out" && grep -q 'chosen: --config research' <<< "$out"; }; then echo "FAIL: run.sh --dry claude: $out"; fail=1; fi
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json gemini 2>&1)
-if ! { grep -q 'agent gemini as cocoon-gemini\[bot\]' <<< "$out" && grep -q 'cocoon-ai-gemini-config:/home/node/.gemini' <<< "$out"; }; then echo "FAIL: run.sh --dry gemini: $out"; fail=1; fi
+if ! { grep -q 'agent gemini as example-gemini\[bot\]' <<< "$out" && grep -q 'example-gemini-config:/home/node/.gemini' <<< "$out"; }; then echo "FAIL: run.sh --dry gemini: $out"; fail=1; fi
 out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude -- --nope 2>&1); grep -q "unknown profile '--nope'" <<< "$out" || { echo "FAIL: run.sh --dry unknown profile: $out"; fail=1; }
 # the container's command is the typed words once, after the profiles; the agent's name is not added again (2026-10-11:
 # run.sh passed it twice and Claude Code took the second copy as the session's first prompt); no words means the image alone
-out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude --continue -- --research 2>&1); grep -q 'container command: cocoon-ai-sandbox --config research claude --continue$' <<< "$out" || { echo "FAIL: run.sh --dry container command: $out"; fail=1; }
-out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json 2>&1); grep -q 'container command: cocoon-ai-sandbox$' <<< "$out" || { echo "FAIL: run.sh --dry container command without an agent: $out"; fail=1; }
+out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json claude --continue -- --research 2>&1); grep -q 'container command: example-sandbox --config research claude --continue$' <<< "$out" || { echo "FAIL: run.sh --dry container command: $out"; fail=1; }
+out=$(bash sandbox/run.sh --dry examples/cocoon-ai.json 2>&1); grep -q 'container command: example-sandbox$' <<< "$out" || { echo "FAIL: run.sh --dry container command without an agent: $out"; fail=1; }
 # the gateway section: the gateway example passes; each half is refused without the other; a non-address, a bad hostname and an
 # unknown key in either section are refused with the problem named
 G=examples/cocoon-ai-gateway.json
@@ -44,7 +44,7 @@ jq '.agents.claude.gateway.extra = "x"' "$G" > "$T/gw6.json"; expect fail "$T/gw
 mkdir -p -- "$T/gw"; for f in root.crt claude.crt claude.key claude.token; do echo x > "$T/gw/$f"; done; chmod -- 600 "$T/gw/claude.key" "$T/gw/claude.token"
 jq --arg d "$T/gw" '.gateway.ca = $d + "/root.crt" | .agents.claude.gateway = {cert: ($d + "/claude.crt"), key: ($d + "/claude.key"), token: ($d + "/claude.token")}' "$G" > "$T/gwdry.json"
 out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1)
-if ! { grep -q "gateway gw.thecocoon.studio at $(jq -r .gateway.address "$G"); no token minted; mounts: root.crt, client.crt, client.key, client.token" <<< "$out" && grep -q 'container command: cocoon-ai-sandbox claude$' <<< "$out"; }; then echo "FAIL: run.sh --dry with a gateway: $out"; fail=1; fi
+if ! { grep -q "gateway gw.example.com at $(jq -r .gateway.address "$G"); no token minted; mounts: root.crt, client.crt, client.key, client.token" <<< "$out" && grep -q 'container command: example-sandbox claude$' <<< "$out"; }; then echo "FAIL: run.sh --dry with a gateway: $out"; fail=1; fi
 grep -q 'WARNING' <<< "$out" && { echo "FAIL: run.sh --dry with a gateway warned at mode 600: $out"; fail=1; }
 chmod -- 644 "$T/gw/claude.key"; out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1); grep -q "WARNING $T/gw/claude.key has mode 644" <<< "$out" || { echo "FAIL: run.sh --dry gateway key mode: $out"; fail=1; }
 rm -f -- "${T:?}/gw/claude.token"; out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1); grep -q "gateway file not readable: $T/gw/claude.token" <<< "$out" || { echo "FAIL: run.sh --dry gateway missing file: $out"; fail=1; }
