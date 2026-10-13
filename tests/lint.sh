@@ -30,6 +30,10 @@ for f in "${scripts[@]}"; do
   # grep sees the direct form only, curl piped into jq on one line with no `if (`, `select(` or `-e`; a
   # response held in a variable and read later is checked by hand (the owner, 2026-10-11).
   if grep -nE 'curl .*\|[[:space:]]*jq ' "$f" | grep -vE 'jq +-[a-zA-Z]*e|if \(|select\('; then echo "lint: $f: an API response read through jq with no check of its shape"; fail=1; fi
+  # 2026-10-13: chmod or chown with the -- after the mode or the owner. GNU accepts it; macOS's BSD chmod ends its
+  # options at the mode and reads the -- as a file name ("chmod: --: No such file or directory", the owner's Mac,
+  # running the gateway's certs.sh). The -- goes before the mode: chmod -- 700 "$dir". The launcher runs on macOS.
+  if grep -nE '(chmod|chown)( -[A-Za-z]+)* +([0-7]{3,4}|[0-9]+:[0-9]+|[ugoa]*[-+=][rwxXst]+) +-- ' "$f"; then echo "lint: $f: -- after the mode; macOS reads it as a file (put it before the mode)"; fail=1; fi
   if grep -nE 'cherry-pick +-q' "$f"; then echo "lint: $f: git cherry-pick -q does not exist"; fail=1; fi
   # 2026-10-02, 2026-10-08: a pipeline's status is its last command's, so a failure before the last
   # pipe is invisible; every script turns pipefail on in its first set line (-e is the script's own

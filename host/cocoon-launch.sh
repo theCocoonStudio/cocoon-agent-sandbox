@@ -91,7 +91,7 @@ if [ "$(jq -r '.command.install // false' "$CONFIG")" = true ]; then
   if [ "$self" != "$bin/cocoon" ]; then
     mkdir -p -- "$bin"
     if ! { [ -f "$bin/cocoon" ] && cmp -s -- "$self" "$bin/cocoon"; }; then
-      cp -- "$self" "$bin/cocoon" && chmod 755 -- "$bin/cocoon"
+      cp -- "$self" "$bin/cocoon" && chmod -- 755 "$bin/cocoon"
       echo "launcher: installed as $bin/cocoon" >&2
     fi
     case ":$PATH:" in *":$bin:"*) ;; *) echo "launcher: NOTE $bin is not on your PATH; add it, or call $bin/cocoon" >&2 ;; esac

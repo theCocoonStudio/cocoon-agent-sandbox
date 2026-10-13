@@ -41,12 +41,12 @@ jq '.gateway.port = 8443' "$G" > "$T/gw5.json"; expect fail "$T/gw5.json" "unkno
 jq '.agents.claude.gateway.extra = "x"' "$G" > "$T/gw6.json"; expect fail "$T/gw6.json" "unknown key in agents.claude.gateway: extra"
 # the dry run with a gateway: the four host files present, it names the gateway and its mounts, mints nothing, and the
 # container's command is unchanged; a key at a mode other than 600 or 400 is warned about; a missing file is refused by path
-mkdir -p -- "$T/gw"; for f in root.crt claude.crt claude.key claude.token; do echo x > "$T/gw/$f"; done; chmod 600 -- "$T/gw/claude.key" "$T/gw/claude.token"
+mkdir -p -- "$T/gw"; for f in root.crt claude.crt claude.key claude.token; do echo x > "$T/gw/$f"; done; chmod -- 600 "$T/gw/claude.key" "$T/gw/claude.token"
 jq --arg d "$T/gw" '.gateway.ca = $d + "/root.crt" | .agents.claude.gateway = {cert: ($d + "/claude.crt"), key: ($d + "/claude.key"), token: ($d + "/claude.token")}' "$G" > "$T/gwdry.json"
 out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1)
 if ! { grep -q "gateway gw.thecocoon.studio at $(jq -r .gateway.address "$G"); no token minted; mounts: root.crt, client.crt, client.key, client.token" <<< "$out" && grep -q 'container command: cocoon-ai-sandbox claude$' <<< "$out"; }; then echo "FAIL: run.sh --dry with a gateway: $out"; fail=1; fi
 grep -q 'WARNING' <<< "$out" && { echo "FAIL: run.sh --dry with a gateway warned at mode 600: $out"; fail=1; }
-chmod 644 -- "$T/gw/claude.key"; out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1); grep -q "WARNING $T/gw/claude.key has mode 644" <<< "$out" || { echo "FAIL: run.sh --dry gateway key mode: $out"; fail=1; }
+chmod -- 644 "$T/gw/claude.key"; out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1); grep -q "WARNING $T/gw/claude.key has mode 644" <<< "$out" || { echo "FAIL: run.sh --dry gateway key mode: $out"; fail=1; }
 rm -f -- "${T:?}/gw/claude.token"; out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1); grep -q "gateway file not readable: $T/gw/claude.token" <<< "$out" || { echo "FAIL: run.sh --dry gateway missing file: $out"; fail=1; }
 out=$(HOME="$T" bash host/cocoon-launch.sh --dry 2>&1); grep -q "no configuration at $T/.config/cocoon/sandbox.json" <<< "$out" || { echo "FAIL: launcher without a configuration: $out"; fail=1; }
 out=$(bash host/cocoon-launch.sh --dry "--config=$T/elsewhere.json" 2>&1); grep -q "no configuration at $T/elsewhere.json" <<< "$out" || { echo "FAIL: launcher --config=<path>: $out"; fail=1; }
