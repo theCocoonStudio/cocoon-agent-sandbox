@@ -13,10 +13,10 @@
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "DISABLE_AUTOUPDATER": "1",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    "GIT_AUTHOR_NAME": "cocoon-claude[bot]",
-    "GIT_COMMITTER_NAME": "cocoon-claude[bot]",
-    "GIT_AUTHOR_EMAIL": "324573615+cocoon-claude[bot]@users.noreply.github.com",
-    "GIT_COMMITTER_EMAIL": "324573615+cocoon-claude[bot]@users.noreply.github.com"
+    "GIT_AUTHOR_NAME": "example-claude[bot]",
+    "GIT_COMMITTER_NAME": "example-claude[bot]",
+    "GIT_AUTHOR_EMAIL": "200001+example-claude[bot]@users.noreply.github.com",
+    "GIT_COMMITTER_EMAIL": "200001+example-claude[bot]@users.noreply.github.com"
   },
   "remoteEnv": {
     "GH_TOKEN": "${localEnv:GH_TOKEN}"
