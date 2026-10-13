@@ -130,7 +130,10 @@ while IFS= read -r slug; do
   dir=/home/node/${slug##*/}
   if { [ -n "${GH_TOKEN:-}" ] || [ "$GATEWAY" = 1 ]; } && [ ! -d "$dir/.git" ]; then
     echo "cloning $slug (first start in this container)..."
-    gh repo clone "$slug" "$dir" -- -q || echo "clone of $slug failed; will retry next start"
+    # git, not gh: in the gateway shape gh builds its clone URL on GH_HOST, the API subdomain, which the gateway
+    # maps to api.github.com (403 for a git path; the first start with the gateway, 2026-10-13, cloned nothing);
+    # git's insteadOf carries github.com to the git subdomain, and in the old shape gh's credential helper serves it.
+    git clone -q "https://github.com/$slug.git" "$dir" || echo "clone of $slug failed; will retry next start"
   fi
 done < <(jq -r '(.clones // [])[]' "$CFG" 2>/dev/null || true)
 
