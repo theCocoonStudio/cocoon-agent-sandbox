@@ -39,13 +39,23 @@ jq '.gateway.address = "gw.example"' "$G" > "$T/gw3.json"; expect fail "$T/gw3.j
 jq '.gateway.domain = "GW"' "$G" > "$T/gw4.json"; expect fail "$T/gw4.json" "gateway.domain must be a hostname"
 jq '.gateway.port = 8443' "$G" > "$T/gw5.json"; expect fail "$T/gw5.json" "unknown key in gateway: port"
 jq '.agents.claude.gateway.extra = "x"' "$G" > "$T/gw6.json"; expect fail "$T/gw6.json" "unknown key in agents.claude.gateway: extra"
+# the model path is per agent (2026-10-14: one flag for both agents sent Gemini to a gateway with no Gemini upstream): the
+# top-level key is refused, each agent's is required and boolean, and true needs the agent's model upstream in upstreams
+jq '.gateway.model = false' "$G" > "$T/gw7.json"; expect fail "$T/gw7.json" "unknown key in gateway: model"
+jq 'del(.agents.claude.gateway.model)' "$G" > "$T/gw8.json"; expect fail "$T/gw8.json" "missing in agents.claude.gateway: model"
+jq '.agents.claude.gateway.model = "yes"' "$G" > "$T/gw9.json"; expect fail "$T/gw9.json" "agents.claude.gateway.model must be true or false"
+jq '.agents.gemini.gateway.model = true' "$G" > "$T/gw10.json"; expect fail "$T/gw10.json" "agents.gemini.gateway.model is true but gateway.upstreams has no gemini"
+jq '.gateway.upstreams -= ["anthropic"]' "$G" > "$T/gw11.json"; expect fail "$T/gw11.json" "agents.claude.gateway.model is true but gateway.upstreams has no anthropic"
+jq '.gateway.upstreams += ["gemini"] | .agents.gemini.gateway.model = true' "$G" > "$T/gw12.json"; expect pass "$T/gw12.json" ""
+out=$(bash sandbox/check-config.sh "$G" 2>&1); grep -q 'model through it: claude)$' <<< "$out" || { echo "FAIL: check-config names the agents whose model goes through the gateway: $out"; fail=1; }
 # the dry run with a gateway: the four host files present, it names the gateway and its mounts, mints nothing, and the
 # container's command is unchanged; a key at a mode other than 600 or 400 is warned about; a missing file is refused by path
-mkdir -p -- "$T/gw"; for f in root.crt claude.crt claude.key claude.token; do echo x > "$T/gw/$f"; done; chmod -- 600 "$T/gw/claude.key" "$T/gw/claude.token"
-jq --arg d "$T/gw" '.gateway.ca = $d + "/root.crt" | .agents.claude.gateway = {cert: ($d + "/claude.crt"), key: ($d + "/claude.key"), token: ($d + "/claude.token")}' "$G" > "$T/gwdry.json"
+mkdir -p -- "$T/gw"; for f in root.crt claude.crt claude.key claude.token gemini.crt gemini.key gemini.token; do echo x > "$T/gw/$f"; done; chmod -- 600 "$T/gw/claude.key" "$T/gw/claude.token" "$T/gw/gemini.key" "$T/gw/gemini.token"
+jq --arg d "$T/gw" '.gateway.ca = $d + "/root.crt" | .agents.claude.gateway = {cert: ($d + "/claude.crt"), key: ($d + "/claude.key"), token: ($d + "/claude.token"), model: true} | .agents.gemini.gateway = {cert: ($d + "/gemini.crt"), key: ($d + "/gemini.key"), token: ($d + "/gemini.token"), model: false}' "$G" > "$T/gwdry.json"
 out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1)
-if ! { grep -q "gateway gw.example.com at $(jq -r .gateway.address "$G"); no token minted; mounts: root.crt, client.crt, client.key, client.token" <<< "$out" && grep -q 'container command: example-sandbox claude$' <<< "$out"; }; then echo "FAIL: run.sh --dry with a gateway: $out"; fail=1; fi
+if ! { grep -q "gateway gw.example.com at $(jq -r .gateway.address "$G"); no token minted; model through it: true; mounts: root.crt, client.crt, client.key, client.token" <<< "$out" && grep -q 'container command: example-sandbox claude$' <<< "$out"; }; then echo "FAIL: run.sh --dry with a gateway: $out"; fail=1; fi
 grep -q 'WARNING' <<< "$out" && { echo "FAIL: run.sh --dry with a gateway warned at mode 600: $out"; fail=1; }
+out=$(bash sandbox/run.sh --dry "$T/gwdry.json" gemini 2>&1); grep -q "no token minted; model through it: false; mounts:" <<< "$out" || { echo "FAIL: run.sh --dry gemini names its own model path: $out"; fail=1; }
 chmod -- 644 "$T/gw/claude.key"; out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1); grep -q "WARNING $T/gw/claude.key has mode 644" <<< "$out" || { echo "FAIL: run.sh --dry gateway key mode: $out"; fail=1; }
 rm -f -- "${T:?}/gw/claude.token"; out=$(bash sandbox/run.sh --dry "$T/gwdry.json" claude 2>&1); grep -q "gateway file not readable: $T/gw/claude.token" <<< "$out" || { echo "FAIL: run.sh --dry gateway missing file: $out"; fail=1; }
 out=$(HOME="$T" bash host/cocoon-launch.sh --dry 2>&1); grep -q "no configuration at $T/.config/cocoon/sandbox.json" <<< "$out" || { echo "FAIL: launcher without a configuration: $out"; fail=1; }

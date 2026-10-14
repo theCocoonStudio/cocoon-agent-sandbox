@@ -100,7 +100,7 @@ if [ "$DRY" = 1 ]; then
   echo "run.sh --dry: image $IMAGE from $SANDBOX; container $CONTAINER; volumes $WORKSPACE_VOLUME:/workspace, $CONFIG_VOLUME"
   echo "run.sh --dry: profiles known: ${KNOWN_PROFILES[*]:-none}; chosen: ${CONFIG_ARGS[*]:-none}; agent env: ${AGENT_ENV[*]:-none}"
   printf 'run.sh --dry: container command:'; printf ' %s' "$IMAGE" "${CONFIG_ARGS[@]}" "$@"; echo   # the image, then exactly what the entrypoint receives
-  if [ "$GATEWAY" = 1 ]; then echo "run.sh --dry: gateway $GW_DOMAIN at $(cfg .gateway.address); no token minted; mounts: root.crt, client.crt, client.key, client.token"; fi
+  if [ "$GATEWAY" = 1 ]; then echo "run.sh --dry: gateway $GW_DOMAIN at $(cfg .gateway.address); no token minted; model through it: $(a gateway.model); mounts: root.crt, client.crt, client.key, client.token"; fi
   exit 0   # a dry run shows what would run; the tools are the host's to have
 fi
 

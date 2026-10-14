@@ -35,7 +35,8 @@
       "gateway": {
         "cert": "~/.config/cocoon/gateway/claude.crt",
         "key": "~/.config/cocoon/gateway/claude.key",
-        "token": "~/.config/cocoon/gateway/claude.token"
+        "token": "~/.config/cocoon/gateway/claude.token",
+        "model": true
       }
     },
     "gemini": {
@@ -51,7 +52,8 @@
       "gateway": {
         "cert": "~/.config/cocoon/gateway/gemini.crt",
         "key": "~/.config/cocoon/gateway/gemini.key",
-        "token": "~/.config/cocoon/gateway/gemini.token"
+        "token": "~/.config/cocoon/gateway/gemini.token",
+        "model": false
       }
     }
   },
@@ -66,7 +68,6 @@
       "arxiv",
       "export-arxiv"
     ],
-    "ca": "~/.config/cocoon/gateway/root.crt",
-    "model": false
+    "ca": "~/.config/cocoon/gateway/root.crt"
   }
 }

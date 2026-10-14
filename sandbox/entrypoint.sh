@@ -31,14 +31,17 @@ sudo /usr/local/bin/init-firewall.sh "$AGENT" "${CONFIGS[@]}"
 #   REQUESTS_CA_BUNDLE (Python requests); GH_HOST on the github subdomain with a placeholder enterprise
 #   token (gh sends it as Authorization, which the gateway drops and replaces by the App's; it only has
 #   to be non-empty); git rewrites github.com to the git subdomain and trusts the CA; npm's registry and
-#   cafile; ANTHROPIC_BASE_URL on the anthropic subdomain when gateway.model is true.
+#   cafile; the agent's model base URL on its subdomain when its own agents.<agent>.gateway.model is true
+#   (claude: ANTHROPIC_BASE_URL on anthropic; gemini: GOOGLE_GEMINI_BASE_URL on gemini, the variable its CLI
+#   reads, unexercised until a gateway serves a gemini upstream). Per agent since 2026-10-14: one flag for
+#   both agents routed Gemini to a gateway with no Gemini upstream, and its CLI hung at the prompt (2026-10-13).
 CFG=/etc/cocoon/sandbox.json   # run.sh mounts the reviewed configuration read-only
 GATEWAY=0
 if [ -r "$CFG" ] && jq -e '.gateway' "$CFG" >/dev/null 2>&1; then
   GATEWAY=1
   GW_DOMAIN=$(jq -r '.gateway.domain' "$CFG")
   GW_ADDR=$(jq -r '.gateway.address' "$CFG")
-  GW_MODEL=$(jq -r '.gateway.model // false' "$CFG")
+  GW_MODEL=$(jq -r --arg a "$AGENT" '.agents[$a].gateway.model' "$CFG")   # this agent's; the firewall refused a non-boolean before this line
   GW_DIR=/etc/cocoon/gateway
   RELAY=/tmp/cocoon-relay
   rm -rf -- "${RELAY:?}" && mkdir -m 700 -- "$RELAY"
@@ -61,8 +64,14 @@ if [ -r "$CFG" ] && jq -e '.gateway' "$CFG" >/dev/null 2>&1; then
   git config --global "url.https://git.$GW_DOMAIN/.insteadOf" "https://github.com/"
   git config --global http.sslCAInfo "$RELAY/ca.crt"
   npm config set --location=user "registry=https://npm.$GW_DOMAIN/" "cafile=$RELAY/ca.crt"
-  if [ "$GW_MODEL" = true ]; then export ANTHROPIC_BASE_URL="https://anthropic.$GW_DOMAIN"; fi
-  echo "gateway: $GW_DOMAIN at $GW_ADDR through the relay; no token in this container; model through it: $GW_MODEL"
+  if [ "$GW_MODEL" = true ]; then
+    case "$AGENT" in
+      claude) export ANTHROPIC_BASE_URL="https://anthropic.$GW_DOMAIN" ;;
+      gemini) export GOOGLE_GEMINI_BASE_URL="https://gemini.$GW_DOMAIN" ;;   # unexercised: no gateway serves a gemini upstream yet (the firewall refuses model true for gemini until gateway.upstreams lists it)
+      *) echo "gateway: no model path known for agent '$AGENT'" >&2; exit 1 ;;
+    esac
+  fi
+  echo "gateway: $GW_DOMAIN at $GW_ADDR through the relay; no token in this container; $AGENT's model through it: $GW_MODEL"
   echo "gh: through the gateway; repos: $(gh api installation/repositories -q '[.repositories[].full_name] | join(", ")' 2>/dev/null || echo '? (see the gateway log)')"
 fi
 
