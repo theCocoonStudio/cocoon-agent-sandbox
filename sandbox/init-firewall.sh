@@ -57,6 +57,12 @@
 set -euo pipefail   # Exit on any error, on unset variables, and on failures inside pipes.
 IFS=$'\n\t'         # Word-split only on newlines and tabs, never on spaces.
 
+LOCKDIR="/var/run/cocoon-firewall"
+if ! mkdir "$LOCKDIR" 2>/dev/null; then
+    echo "ERROR: Firewall already initialized or cannot create lock." >&2
+    exit 1
+fi
+
 # The tools this script needs, declared once and checked before the first rule, as every script
 # in this repository does. Every missing one is named in one line, so an image that lacks two
 # says so once; a container never starts with a half-built wall.
@@ -297,7 +303,13 @@ if [ "$GATEWAY" = 0 ]; then
     read_hosts base
     read_hosts "$AGENT"
     read_hosts "$AGENT-login"
-    for config in "$@"; do read_hosts "$config"; done
+    for config in "$@"; do
+        if [[ "$config" == */* ]]; then
+            echo "ERROR: invalid config name '$config' (path traversal attempt)" >&2
+            exit 1
+        fi
+        read_hosts "$config"
+    done
 else
     [ "$GW_MODEL" = true ] || read_hosts "$AGENT"   # the model host, until the model goes through the gateway too
     read_hosts "$AGENT-login"
