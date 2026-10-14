@@ -134,11 +134,6 @@
         "ca": {
           "type": "string",
           "description": "host path of the private root's public half (root.crt from certs.sh); the container trusts it and nothing else for the gateway"
-        },
-        "model": {
-          "type": "boolean",
-          "default": false,
-          "description": "route the agent's model API through the gateway's anthropic subdomain (ANTHROPIC_BASE_URL); the agent's login hosts (<agent>-login.hosts) stay allowed directly in every shape, since the login's token refresh does not follow that variable"
         }
       }
     }
@@ -201,9 +196,10 @@
           "required": [
             "cert",
             "key",
-            "token"
+            "token",
+            "model"
           ],
-          "description": "this agent's client identity at the gateway (certs.sh client <dir> <role>): required when the top-level gateway is present, refused otherwise",
+          "description": "this agent's client identity at the gateway (certs.sh client <dir> <role>) and its model path: required when the top-level gateway is present, refused otherwise",
           "properties": {
             "cert": {
               "type": "string",
@@ -216,6 +212,10 @@
             "token": {
               "type": "string",
               "description": "host path of <role>.token, mode 600, one line: the role's bearer token the relay adds as Proxy-Authorization"
+            },
+            "model": {
+              "type": "boolean",
+              "description": "route this agent's model API through the gateway (claude: ANTHROPIC_BASE_URL on the anthropic subdomain; gemini: GOOGLE_GEMINI_BASE_URL on a gemini subdomain, once a gateway serves one); true is refused unless the agent's model upstream (claude: anthropic, gemini: gemini) is in gateway.upstreams; false keeps the agent's own model host (<agent>.hosts) allowed directly. The login hosts (<agent>-login.hosts) stay allowed directly either way. Per agent since 2026-10-14: a gateway that serves one agent's model and not another's is the common case"
             }
           }
         }

@@ -48,10 +48,13 @@
 #   (no public DNS needed). Port 443 to the address is redirected to the container's relay on
 #   127.0.0.1:8443 (entrypoint.sh starts it): tools that cannot present a client certificate
 #   themselves (gh, npm) talk to the relay, which carries mutual TLS to the gateway on its
-#   port 8443, the one port not redirected. With `model` false the agent's own model host
-#   stays allowed directly; with it true the model API goes through the gateway too. The
-#   agent's login hosts (<agent>-login.hosts) stay allowed directly in both shapes: the login's
-#   token refresh goes to them and does not follow ANTHROPIC_BASE_URL.
+#   port 8443, the one port not redirected. With the agent's own agents.<agent>.gateway.model
+#   false its model host stays allowed directly; with it true the model API goes through the
+#   gateway too, and true needs the agent's model upstream among the subdomains (per agent since
+#   2026-10-14: one flag for both agents routed Gemini to a gateway with no Gemini upstream, and
+#   its CLI hung at the prompt, 2026-10-13). The agent's login hosts (<agent>-login.hosts) stay
+#   allowed directly in both shapes: the login's token refresh goes to them and does not follow
+#   the model's base-URL variable.
 # =============================================================================
 
 set -euo pipefail   # Exit on any error, on unset variables, and on failures inside pipes.
@@ -200,13 +203,9 @@ if [ "$GATEWAY" = 1 ]; then
     if ! jq -e '.gateway.upstreams | type == "array" and length > 0 and all(.[]; type == "string" and test("^[a-z][a-z0-9-]*$"))' "$CFG" >/dev/null; then
         echo "ERROR: gateway.upstreams must be a non-empty array of lowercase names (missing, null and [] refused)"; exit 1
     fi
-    if ! jq -e '(.gateway.model // false) | type == "boolean"' "$CFG" >/dev/null; then
-        echo "ERROR: gateway.model must be true or false"; exit 1
-    fi
     GW_ADDR=$(jq -r '.gateway.address' "$CFG")
     GW_DOMAIN=$(jq -r '.gateway.domain' "$CFG")
-    GW_MODEL=$(jq -r '.gateway.model // false' "$CFG")
-    echo "Gateway shape: $GW_DOMAIN at $GW_ADDR (model through it: $GW_MODEL)"
+    echo "Gateway shape: $GW_DOMAIN at $GW_ADDR"
     ipset add -exist allowed-domains "$GW_ADDR"
     while IFS= read -r name; do
         echo "$GW_ADDR $name.$GW_DOMAIN" >> /etc/hosts
@@ -290,16 +289,38 @@ read_hosts() {
     done < "$file"
 }
 # The agent's login hosts (<agent>-login.hosts) are read in every shape: the login's token refresh goes to them
-# and does not follow ANTHROPIC_BASE_URL, so a wall without them ends the session when the token expires
-# (the first start with gateway.model true, 2026-10-13). The model host (<agent>.hosts) is read until the
-# model goes through the gateway (gateway.model true), and not after.
+# and does not follow the model's base-URL variable, so a wall without them ends the session when the token
+# expires (the first start with the model through the gateway, 2026-10-13). The model host (<agent>.hosts) is
+# read until this agent's model goes through the gateway (agents.<agent>.gateway.model true), and not after.
 if [ "$GATEWAY" = 0 ]; then
     read_hosts base
     read_hosts "$AGENT"
     read_hosts "$AGENT-login"
     for config in "$@"; do read_hosts "$config"; done
 else
-    [ "$GW_MODEL" = true ] || read_hosts "$AGENT"   # the model host, until the model goes through the gateway too
+    # This agent's model path (agents.<agent>.gateway.model; per agent since 2026-10-14). The mounted file is
+    # data, so the value is checked here as the gateway section was. True also needs the agent's model upstream
+    # among the subdomains (claude: anthropic; gemini: gemini), or the model would be sent to a name the gateway
+    # does not serve: on 2026-10-13 one flag for both agents did that to Gemini, and its CLI hung at the prompt
+    # retrying a host this wall refused.
+    case "$AGENT" in
+        claude) model_upstream=anthropic ;;
+        gemini) model_upstream=gemini ;;
+        *) echo "ERROR: no model upstream known for agent '$AGENT'"; exit 1 ;;
+    esac
+    if ! jq -e --arg a "$AGENT" '.agents[$a].gateway.model | type == "boolean"' "$CFG" >/dev/null; then
+        echo "ERROR: agents.$AGENT.gateway.model must be true or false"; exit 1
+    fi
+    GW_MODEL=$(jq -r --arg a "$AGENT" '.agents[$a].gateway.model' "$CFG")
+    if [ "$GW_MODEL" = true ]; then
+        if ! jq -e --arg u "$model_upstream" '.gateway.upstreams | index($u) != null' "$CFG" >/dev/null; then
+            echo "ERROR: agents.$AGENT.gateway.model is true but gateway.upstreams has no $model_upstream (this agent's model upstream)"; exit 1
+        fi
+        echo "Model host for $AGENT: through the gateway ($model_upstream.$GW_DOMAIN)"
+    else
+        echo "Model host for $AGENT: direct ($AGENT.hosts)"
+        read_hosts "$AGENT"
+    fi
     read_hosts "$AGENT-login"
     [ $# -eq 0 ] || echo "NOTE: profiles (${*}) are ignored in the gateway shape; the research hosts are its subdomains"
 fi
