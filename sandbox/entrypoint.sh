@@ -63,6 +63,14 @@ if [ -r "$CFG" ] && jq -e '.gateway' "$CFG" >/dev/null 2>&1; then
   export GH_HOST="github.$GW_DOMAIN" GH_ENTERPRISE_TOKEN=through-the-gateway
   git config --global "url.https://git.$GW_DOMAIN/.insteadOf" "https://github.com/"
   git config --global http.sslCAInfo "$RELAY/ca.crt"
+  # The same two settings in the environment, which git reads before any file (GIT_CONFIG_COUNT, git 2.31+):
+  # a process that hides the global file (the Gemini CLI runs its shell with GIT_CONFIG_GLOBAL=/dev/null, found
+  # 2026-10-16 on the channel's first session: git fell back to github.com and the wall dropped it) still
+  # rewrites github.com to the git subdomain and trusts the relay's CA. Both forms stay: the file for a child
+  # that clears its environment, the environment for a child that hides the file.
+  export GIT_CONFIG_COUNT=2 \
+    GIT_CONFIG_KEY_0="url.https://git.$GW_DOMAIN/.insteadOf" GIT_CONFIG_VALUE_0="https://github.com/" \
+    GIT_CONFIG_KEY_1=http.sslCAInfo GIT_CONFIG_VALUE_1="$RELAY/ca.crt"
   npm config set --location=user "registry=https://npm.$GW_DOMAIN/" "cafile=$RELAY/ca.crt"
   if [ "$GW_MODEL" = true ]; then
     case "$AGENT" in
