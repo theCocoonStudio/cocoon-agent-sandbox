@@ -73,5 +73,11 @@ if ! { grep -q "installed as $T/bin/cocoon" <<< "$out" && cmp -s -- "$T/download
 out=$(bash "$T/bin/cocoon" --dry "--config=$T/install.json" 2>&1 || true); grep -q "installed as" <<< "$out" && { echo "FAIL: the installed copy reinstalled itself: $out"; fail=1; }
 jq '.command.install = false' "$T/install.json" > "$T/noinstall.json"; rm -f -- "${T:?}/bin/cocoon"
 out=$(bash "$T/downloaded.sh" --dry "--config=$T/noinstall.json" 2>&1 || true); [ ! -e "$T/bin/cocoon" ] || { echo "FAIL: installed with command.install false: $out"; fail=1; }
+# the gateway shape's git settings reach a process that hides the global file (GIT_CONFIG_GLOBAL=/dev/null, the Gemini CLI's
+# shell, 2026-10-16): the entrypoint exports them as GIT_CONFIG_COUNT entries too, and git reads those before any file
+grep -q 'GIT_CONFIG_COUNT=2' sandbox/entrypoint.sh && grep -q 'GIT_CONFIG_KEY_0="url.https://git.$GW_DOMAIN/.insteadOf"' sandbox/entrypoint.sh && grep -q 'GIT_CONFIG_KEY_1=http.sslCAInfo' sandbox/entrypoint.sh || { echo "FAIL: entrypoint.sh does not export the git settings as GIT_CONFIG_COUNT entries"; fail=1; }
+out=$(cd "$T" && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0="url.https://git.gw.example.com/.insteadOf" GIT_CONFIG_VALUE_0="https://github.com/" GIT_CONFIG_KEY_1=http.sslCAInfo GIT_CONFIG_VALUE_1=/tmp/ca.crt git config --get-urlmatch http.sslCAInfo https://x 2>&1; cd "$T" && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.https://git.gw.example.com/.insteadOf" GIT_CONFIG_VALUE_0="https://github.com/" git config --get url.https://git.gw.example.com/.insteadof 2>&1)
+[ "$out" = "/tmp/ca.crt
+https://github.com/" ] || { echo "FAIL: git under GIT_CONFIG_GLOBAL=/dev/null did not read the environment settings: $out"; fail=1; }
 for f in sandbox/*.sh host/*.sh hooks/*.sh tests/*.sh; do bash -n "$f" || { echo "FAIL: syntax: $f"; fail=1; }; done
 [ $fail -eq 0 ] && echo "check-config tests: all pass"; exit $fail
