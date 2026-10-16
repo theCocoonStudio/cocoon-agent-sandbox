@@ -41,7 +41,11 @@ const server = https.createServer(leaf, (req, res) => {
     upRes.on('end', () => log({ host, method: req.method, path: req.url, status: upRes.statusCode, ms: Date.now() - started, id: upRes.headers['x-request-id'] }));
   });
   up.on('error', (err) => {
-    if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' });
+    // Once the headers have gone, nothing is appended: an error line inside an encoded or event stream is garbage
+    // to the client (the gateway's error path did this until 2026-10-16 and a gzip-decoding client saw a ZlibError);
+    // the connection is closed instead, so the client sees the cut.
+    if (res.headersSent) { res.destroy(); return log({ host, method: req.method, path: req.url, status: 502, error: `after the headers: ${err.message}` }); }
+    res.writeHead(502, { 'content-type': 'text/plain' });
     res.end(`relay: ${err.message}\n`);
     log({ host, method: req.method, path: req.url, status: 502, error: err.message });
   });
