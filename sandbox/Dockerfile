@@ -17,8 +17,13 @@ ENV TZ="$TZ"
 ARG CLAUDE_CODE_VERSION=2.1.302
 # Pinned the same way; 0.62.0 audited 2026-10-02 (clean, Apache-2.0, one bundle, no runtime dependencies);
 # 0.63.0 on 2026-10-11 (cocoon-ai's PR #73 of 2026-10-10: release notes read there, fixes only; the one advisory in GitHub's database,
-# GHSA-wpqr-6v78-jr5g, affects versions below 0.39.1; npm's latest tag is 0.63.0, published 2026-10-06, 5 days old).
-ARG GEMINI_CLI_VERSION=0.63.0
+# GHSA-wpqr-6v78-jr5g, affects versions below 0.39.1; npm's latest tag is 0.63.0, published 2026-10-06, 5 days old);
+# 0.64.0 on 2026-10-17 (release notes read: fixes and a settings-migration refactor, folder trust propagated in headless mode;
+# the tarball fetched through the gateway's npm upstream, its sha512 equal to the registry's integrity; Apache-2.0, one bundle,
+# no runtime dependencies; read in its bundle: the tool names, the admin policy tier, the system settings precedence and the
+# three shell gates (working directory outside the workspace, dangerous command, redirection) unchanged from 0.63.0; GitHub's
+# advisory database lists none affecting 0.64.0; npm's latest tag is 0.64.0, published 2026-10-13).
+ARG GEMINI_CLI_VERSION=0.64.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates curl git gh jq less nano procps sudo \
