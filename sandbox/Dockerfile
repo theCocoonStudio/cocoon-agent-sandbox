@@ -77,8 +77,12 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 #                                       What refuses inside the sandbox is the wall, the gateway's policy and
 #                                       the rulesets, not this prompt; the web tools (web_fetch,
 #                                       google_web_search) are not listed and still prompt. The names are the
-#                                       ones the 0.63.0 bundle defines (grep_search, not search_file_content; it
-#                                       defines no save_memory: Gemini's review of #15, 2026-10-17).
+#                                       canonical ones the 0.63.0 and 0.64.0 bundles define (grep_search; its legacy
+#                                       alias search_file_content is mapped to it by the bundle's TOOL_LEGACY_ALIASES,
+#                                       a live entry behind a comment that reads like an example, so listing the
+#                                       canonical name is enough; no save_memory exists: Gemini's review of #15,
+#                                       2026-10-17, right on both names; Claude's reading of the alias table as empty,
+#                                       on #15 and the channel that night, was wrong and is corrected here).
 # Folder trust stays ON (the CLI's default): an untrusted folder's own settings, hooks and
 # extensions are ignored and auto-approval may not edit there. The first `cocoon gemini`
 # asks once to trust /workspace; the answer lives in the gemini config volume.
