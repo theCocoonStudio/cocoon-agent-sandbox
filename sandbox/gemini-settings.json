@@ -1,5 +1,19 @@
 {
   "general": { "enableAutoUpdate": false },
   "privacy": { "usageStatisticsEnabled": false },
-  "security": { "auth": { "selectedType": "gemini-api-key" } }
+  "security": { "auth": { "selectedType": "gemini-api-key" } },
+  "tools": {
+    "allowed": [
+      "run_shell_command",
+      "read_file",
+      "write_file",
+      "replace",
+      "list_directory",
+      "glob",
+      "search_file_content",
+      "read_many_files",
+      "save_memory",
+      "write_todos"
+    ]
+  }
 }

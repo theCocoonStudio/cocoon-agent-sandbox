@@ -56,6 +56,16 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 #   general.enableAutoUpdate false      the pin above is the update; nothing updates itself
 #   privacy.usageStatisticsEnabled false its telemetry host (play.googleapis.com) is outside the firewall too
 #   security.auth.selectedType          API-key auth, the one mode whose only host is in the allowlist
+#   tools.allowed                       the ten file, shell and memory tools run without a prompt (the owner,
+#                                       2026-10-16: the prompt was theirs to answer at every command, and the
+#                                       agent had started widening its own user-level settings and policies
+#                                       to stop it; this file is the system level, above the user's and the
+#                                       workspace's in the CLI's precedence (its 0.63.0 bundle: settings.json
+#                                       here overrides ~/.gemini/settings.json and .gemini/settings.json), so
+#                                       the decision is the repository's, reviewed, and not the agent's).
+#                                       What refuses inside the sandbox is the wall, the gateway's policy and
+#                                       the rulesets, not this prompt; the web tools (web_fetch,
+#                                       google_web_search) are not listed and still prompt.
 # Folder trust stays ON (the CLI's default): an untrusted folder's own settings, hooks and
 # extensions are ignored and auto-approval may not edit there. The first `cocoon gemini`
 # asks once to trust /workspace; the answer lives in the gemini config volume.
