@@ -79,5 +79,7 @@ if ! { grep -q 'GIT_CONFIG_COUNT=2' sandbox/entrypoint.sh && grep -qF "GIT_CONFI
 out=$(cd "$T" && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0="url.https://git.gw.example.com/.insteadOf" GIT_CONFIG_VALUE_0="https://github.com/" GIT_CONFIG_KEY_1=http.sslCAInfo GIT_CONFIG_VALUE_1=/tmp/ca.crt git config --get-urlmatch http.sslCAInfo https://x 2>&1; cd "$T" && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.https://git.gw.example.com/.insteadOf" GIT_CONFIG_VALUE_0="https://github.com/" git config --get url.https://git.gw.example.com/.insteadof 2>&1)
 [ "$out" = "/tmp/ca.crt
 https://github.com/" ] || { echo "FAIL: git under GIT_CONFIG_GLOBAL=/dev/null did not read the environment settings: $out"; fail=1; }
+# the Gemini system settings parse, and name the shell tool among the tools that run without a prompt (the owner, 2026-10-16)
+jq -e '.tools.allowed | index("run_shell_command") != null' sandbox/gemini-settings.json >/dev/null 2>&1 || { echo "FAIL: sandbox/gemini-settings.json does not list run_shell_command under tools.allowed, or does not parse"; fail=1; }
 for f in sandbox/*.sh host/*.sh hooks/*.sh tests/*.sh; do bash -n "$f" || { echo "FAIL: syntax: $f"; fail=1; }; done
 [ $fail -eq 0 ] && echo "check-config tests: all pass"; exit $fail
