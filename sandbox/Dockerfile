@@ -7,12 +7,23 @@ ENV TZ="$TZ"
 # Pinned; bump on purpose, with the changelog read. 2.1.287 was the image's version on 2026-10-02; 2.1.288 on 2026-10-03; 2.1.289 on 2026-10-05, changelog read;
 # 2.1.296 on 2026-10-11 (the bump cocoon-ai took on 2026-10-10 in its PR #73, changelog 2.1.290 to 2.1.296 read there; the split of
 # 2026-10-11 copied the older pin; GitHub's advisory database lists 28 advisories for @anthropic-ai/claude-code, every one patched at or
-# before 2.1.163, none affecting 2.1.296; npm's latest tag is 2.1.296, published 2026-10-10).
-ARG CLAUDE_CODE_VERSION=2.1.296
+# before 2.1.163, none affecting 2.1.296; npm's latest tag is 2.1.296, published 2026-10-10);
+# 2.1.302 on 2026-10-17 (changelog 2.1.297 to 2.1.302 read: fixes and additions, none changing what this sandbox relies on;
+# of note for it: a PreToolUse or PermissionRequest hook's updatedInput is now validated like the model's own input (2.1.300);
+# a conversation too long for the server-side auto-mode classifier is compacted instead of every call being denied (2.1.302);
+# idle compaction added in 2.1.299, a 200K+ token conversation idle about 54 minutes compacts itself unless `idleCompaction` is
+# false in the agent's settings; GitHub's advisory database lists none affecting 2.1.302; npm's latest tag is 2.1.302, published
+# 2026-10-16).
+ARG CLAUDE_CODE_VERSION=2.1.302
 # Pinned the same way; 0.62.0 audited 2026-10-02 (clean, Apache-2.0, one bundle, no runtime dependencies);
 # 0.63.0 on 2026-10-11 (cocoon-ai's PR #73 of 2026-10-10: release notes read there, fixes only; the one advisory in GitHub's database,
-# GHSA-wpqr-6v78-jr5g, affects versions below 0.39.1; npm's latest tag is 0.63.0, published 2026-10-06, 5 days old).
-ARG GEMINI_CLI_VERSION=0.63.0
+# GHSA-wpqr-6v78-jr5g, affects versions below 0.39.1; npm's latest tag is 0.63.0, published 2026-10-06, 5 days old);
+# 0.64.0 on 2026-10-17 (release notes read: fixes and a settings-migration refactor, folder trust propagated in headless mode;
+# the tarball fetched through the gateway's npm upstream, its sha512 equal to the registry's integrity; Apache-2.0, one bundle,
+# no runtime dependencies; read in its bundle: the tool names, the admin policy tier, the system settings precedence and the
+# three shell gates (working directory outside the workspace, dangerous command, redirection) unchanged from 0.63.0; GitHub's
+# advisory database lists none affecting 0.64.0; npm's latest tag is 0.64.0, published 2026-10-13).
+ARG GEMINI_CLI_VERSION=0.64.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates curl git gh jq less nano procps sudo \
@@ -66,8 +77,12 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 #                                       What refuses inside the sandbox is the wall, the gateway's policy and
 #                                       the rulesets, not this prompt; the web tools (web_fetch,
 #                                       google_web_search) are not listed and still prompt. The names are the
-#                                       ones the 0.63.0 bundle defines (grep_search, not search_file_content; it
-#                                       defines no save_memory: Gemini's review of #15, 2026-10-17).
+#                                       canonical ones the 0.63.0 and 0.64.0 bundles define (grep_search; its legacy
+#                                       alias search_file_content is mapped to it by the bundle's TOOL_LEGACY_ALIASES,
+#                                       a live entry behind a comment that reads like an example, so listing the
+#                                       canonical name is enough; no save_memory exists: Gemini's review of #15,
+#                                       2026-10-17, right on both names; Claude's reading of the alias table as empty,
+#                                       on #15 and the channel that night, was wrong and is corrected here).
 # Folder trust stays ON (the CLI's default): an untrusted folder's own settings, hooks and
 # extensions are ignored and auto-approval may not edit there. The first `cocoon gemini`
 # asks once to trust /workspace; the answer lives in the gemini config volume.
