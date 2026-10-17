@@ -10,9 +10,8 @@
       "replace",
       "list_directory",
       "glob",
-      "search_file_content",
+      "grep_search",
       "read_many_files",
-      "save_memory",
       "write_todos"
     ]
   }
