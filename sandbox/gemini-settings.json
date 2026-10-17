@@ -1,7 +1,15 @@
 {
-  "general": { "enableAutoUpdate": false },
-  "privacy": { "usageStatisticsEnabled": false },
-  "security": { "auth": { "selectedType": "gemini-api-key" } },
+  "general": {
+    "enableAutoUpdate": false
+  },
+  "privacy": {
+    "usageStatisticsEnabled": false
+  },
+  "security": {
+    "auth": {
+      "selectedType": "gemini-api-key"
+    }
+  },
   "tools": {
     "allowed": [
       "run_shell_command",
@@ -12,7 +20,12 @@
       "glob",
       "grep_search",
       "read_many_files",
-      "write_todos"
+      "write_todos",
+      "invoke_agent",
+      "update_topic",
+      "list_background_processes",
+      "read_background_output",
+      "activate_skill"
     ]
   }
 }
