@@ -48,26 +48,26 @@ The hosts lists stay files under `sandbox/configs/` for now, one per agent and p
 
 The files and the machines define the separation; the commands only move the files. Three machines, each holding only its own, and nothing is ever copied from the box: the box reaches nothing.
 
-| file | what it is | the owner's machine | the box | the gateway host |
-|---|---|---|---|---|
-| `root.key` | the private root's key; signs the server and client certificates | yes | no | no |
-| `root.srl` | openssl's serial counter for the root; not a secret | yes | no | no |
-| `root.crt` | the root's public half; each side verifies the other against it | yes | yes | yes |
-| `server.key` | the gateway's TLS private key | yes | no | yes |
-| `server.crt` | the gateway's certificate for the subdomain names, signed by the root | yes | no | yes |
-| `<role>.key` | the role's client private key; the relay presents it to the gateway | yes | yes | no |
-| `<role>.crt` | the role's client certificate, CN the role, signed by the root | yes | yes | no |
-| `<role>.token` | the role's bearer token; the relay sends it, the gateway checks it | yes | yes | yes |
-| the App's private key | mints installation tokens: on the box only while the gateway shape is off (run.sh mints there); on the gateway host as `app.pem` once it is on | yes | until the gateway shape is on | yes |
-| the gateway's env file | the App id, the installation id, and the path of each file above | no | no | yes |
-| the sandbox configuration | `~/.config/cocoon/sandbox.json`: the launcher's input with the real values | no | yes | no |
+| file                      | what it is                                                                                                                                     | the owner's machine | the box                       | the gateway host |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ----------------------------- | ---------------- |
+| `root.key`                | the private root's key; signs the server and client certificates                                                                               | yes                 | no                            | no               |
+| `root.srl`                | openssl's serial counter for the root; not a secret                                                                                            | yes                 | no                            | no               |
+| `root.crt`                | the root's public half; each side verifies the other against it                                                                                | yes                 | yes                           | yes              |
+| `server.key`              | the gateway's TLS private key                                                                                                                  | yes                 | no                            | yes              |
+| `server.crt`              | the gateway's certificate for the subdomain names, signed by the root                                                                          | yes                 | no                            | yes              |
+| `<role>.key`              | the role's client private key; the relay presents it to the gateway                                                                            | yes                 | yes                           | no               |
+| `<role>.crt`              | the role's client certificate, CN the role, signed by the root                                                                                 | yes                 | yes                           | no               |
+| `<role>.token`            | the role's bearer token; the relay sends it, the gateway checks it                                                                             | yes                 | yes                           | yes              |
+| the App's private key     | mints installation tokens: on the box only while the gateway shape is off (run.sh mints there); on the gateway host as `app.pem` once it is on | yes                 | until the gateway shape is on | yes              |
+| the gateway's env file    | the App id, the installation id, and the path of each file above                                                                               | no                  | no                            | yes              |
+| the sandbox configuration | `~/.config/cocoon/sandbox.json`: the launcher's input with the real values                                                                     | no                  | yes                           | no               |
 
 The box's files sit in `~/.config/cocoon/gateway/` (and the sandbox configuration beside them); the gateway host's in its secrets directory, owned by the gateway's user at mode 600. The examples in this repository carry documentation values for every one of these; a repository holds no live configuration.
 
 ## What checks what
 
-- **`check`** (`.github/workflows/check.yml`), on every pull request and on `main`: the lint (`tests/lint.sh`: ShellCheck with [`.shellcheckrc`](.shellcheckrc) over every script, each enabled check a class of mistake we made, plus the classes a linter cannot see as greps: a recursive delete on a variable path without `${var:?}`, `cherry-pick -q`, a script without `pipefail`), the configuration contract's tests and every script's syntax, and, as the second job `image`, the image built from `sandbox/` as `run.sh` builds it, then the entrypoint started in it with the firewall's two capabilities so the firewall's self-test decides: an ordinary public site unreachable, the gateway deaf on UDP 53, GitHub reachable. Made required statuses in the main ruleset, the check passes is a fact on the PR page.
-- **`reviewer-policy`** (`.github/workflows/reviewer-policy.yml`): who may approve whose PR, as a status rather than a habit. The owner's PRs need the agent's approval; the agent's need the owner's; a second agent's approval satisfies nobody's. The file is code-owned, so a PR cannot rewrite the policy that judges it.
+- **`check`** (`.github/workflows/check.yml`), on every pull request and on `main`: the lint (`tests/lint.sh`: ShellCheck with [`.shellcheckrc`](.shellcheckrc) over every script, each enabled check a class of mistake we made, plus the classes a linter cannot see as greps: a recursive delete on a variable path without `${var:?}`, `cherry-pick -q`, a script without `pipefail`), the configuration contract's tests and every script's syntax, and, as the second job `image`, the image built from `sandbox/` as `run.sh` builds it, then the entrypoint started in it with the firewall's two capabilities so the firewall's self-test decides: an ordinary public site unreachable, the gateway deaf on UDP 53, GitHub reachable. Made required checks in the main ruleset (`check` and `policy`), the check passes is a fact on the PR page.
+- **`reviewer-policy`** (`.github/workflows/reviewer-policy.yml`): who may approve whose PR, as a required check rather than a habit: the job `policy` exits non-zero until the latest review on the head, per reviewer, is an approval from an account allowed for the author, and the main ruleset requires that job (the `reviewer-policy` commit status the job used to post is gone). The owner's PRs need the agent's approval; the agent's need the owner's; a second agent's approval satisfies nobody's. The file is code-owned, so a PR cannot rewrite the policy that judges it (this holds for the open/sync path only; on a review event the PR's own file judges. What keeps the table binding is `CODEOWNERS` on the workflow file plus the ruleset's code-owner review, so a PR that rewrites it still needs the owner's approval.)
 - **`dependency-check`** (`.github/workflows/dependency-check.yml`), weekly and on demand: each pinned CLI against GitHub's advisory database and the registry's newest release, red on an advisory against a pin. The owner's rule for every deployed repository; the hook does the same at session start for the agent.
 
 ## The protocol

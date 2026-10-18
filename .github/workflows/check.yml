@@ -29,3 +29,7 @@ jobs:
         run: docker build -t cocoon-sandbox:ci sandbox/
       - name: start the entrypoint in it with the firewall's capabilities; its self-test decides
         run: docker run --rm --cap-add=NET_ADMIN --cap-add=NET_RAW cocoon-sandbox:ci true
+      - name: try a second run that must be refused
+        run: docker run --rm --cap-add=NET_ADMIN --cap-add=NET_RAW cocoon-sandbox:ci bash -c '! sudo /usr/local/bin/init-firewall.sh claude'
+      - name: a run that must fail at the slash
+        run: "! docker run --rm --cap-add=NET_ADMIN --cap-add=NET_RAW cocoon-sandbox:ci --config ../x true"
