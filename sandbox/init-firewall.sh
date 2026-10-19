@@ -27,10 +27,14 @@
 #
 # KNOWN LIMITS (accepted, not bugs)
 #   - DNS to a recursive resolver is itself a covert channel: query names can carry
-#     data out to whoever owns the queried domain. We cannot close this and still
-#     resolve api.anthropic.com. It is narrowed to the configured resolvers only.
+#     data out to whoever owns the queried domain. In the gateway shape it is closed once the
+#     self-test has passed (section 8): every name the session needs is pinned in /etc/hosts at
+#     the address resolved at start, and the resolver rules are removed. In the direct shape it
+#     cannot be closed and still resolve GitHub's many names, so there it stays narrowed to the
+#     configured resolvers only (2026-10-19).
 #   - The allowlist is a snapshot of DNS at start-up. If an allowed host's IP
-#     changes mid-session, that host becomes unreachable until the container restarts.
+#     changes mid-session, that host becomes unreachable until the container restarts; in the
+#     gateway shape the same holds for the pinned names (the login hosts' token refresh).
 #   - The allowlist is by IP, not by name. Anything else hosted on those IPs
 #     (other GitHub repos, other npm packages, other hosts behind the same CDN
 #     addresses) is reachable too. Repository scoping is done by the token, not here.
@@ -114,9 +118,10 @@ ipset destroy allowed-domains 2>/dev/null || true
 iptables -A INPUT  -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 
-# DNS is needed twice: by this script (section 4 resolves the allowlisted hosts) and
-# by the agent for the rest of the session (the Anthropic client resolves its host
-# on every connection).
+# DNS is needed by this script (section 4 resolves the allowlisted hosts) and, in the direct
+# shape, by the agent for the rest of the session (the model client resolves its host on every
+# connection). In the gateway shape every name the session uses is pinned in /etc/hosts by
+# section 4, and section 8 removes these rules once the self-test has passed (2026-10-19).
 #
 # Only the resolvers the container was started with are allowed. Previously this
 # rule was `-p udp --dport 53` with no destination, which let the agent talk to ANY
@@ -352,6 +357,12 @@ for domain in "${DOMAINS[@]}"; do
         fi
         echo "Adding $ip for $domain"
         ipset add -exist allowed-domains "$ip"
+        # In the gateway shape the name is pinned at this address too, so the session resolves it with no
+        # DNS once section 8 has closed the resolvers (the login hosts' token refresh, the model host while
+        # `model` is false); the direct shape keeps its resolvers and needs no pin.
+        if [ "$GATEWAY" = 1 ]; then
+            echo "$ip $domain" >> /etc/hosts
+        fi
     done < <(echo "$ips")
 done
 
@@ -471,4 +482,26 @@ elif ! curl --connect-timeout 5 https://api.github.com/zen >/dev/null 2>&1; then
     exit 1
 else
     echo "Firewall verification passed - able to reach https://api.github.com as expected"
+fi
+
+# -----------------------------------------------------------------------------
+# 8. The gateway shape: no DNS after start
+# -----------------------------------------------------------------------------
+# Every name this session will use is known and pinned now: the six subdomains (section 4g) and the
+# hosts of the lists read (section 4b wrote each resolved address into /etc/hosts beside them). The
+# resolver rules of section 2 are therefore removed, and the covert channel the header names is closed
+# for the rest of the session (2026-10-19). The self-test above needed them (the IPv6 and LAN checks
+# resolve), so this comes last; a resolver that still answers afterwards fails the start. The direct
+# shape keeps its resolvers: GitHub's names are many and its addresses come as ranges.
+if [ "$GATEWAY" = 1 ]; then
+    while read -r ns; do
+        [[ "$ns" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || continue
+        iptables -D OUTPUT -p udp -d "$ns" --dport 53 -j ACCEPT
+        iptables -D OUTPUT -p tcp -d "$ns" --dport 53 -j ACCEPT
+        if dig +time=2 +tries=1 @"$ns" example.com A >/dev/null 2>&1; then
+            echo "ERROR: Firewall verification failed - resolver $ns still answers after its rules were removed"
+            exit 1
+        fi
+        echo "DNS closed: resolver $ns no longer reachable; the session's names are pinned in /etc/hosts"
+    done < <(echo "$resolvers")
 fi
