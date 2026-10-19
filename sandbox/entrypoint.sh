@@ -1,7 +1,14 @@
 #!/bin/bash
-# Runs as `node` on every container start.
+# Runs as `node` on every container start, twice: once holding the two capabilities run.sh grants, to build
+# the wall, then re-executed by itself without them for everything else (the marker below).
 set -euo pipefail
 
+# The second execution carries this marker first; run.sh never gives it (it puts the configs first).
+WITHOUT_CAPABILITIES=0
+if [ "${1:-}" = --without-capabilities ]; then
+  WITHOUT_CAPABILITIES=1
+  shift
+fi
 # run.sh puts the chosen configs first, as `--config <name>` pairs the host user asked for
 # (`cocoon claude -- --research`); they are stripped here and handed to the firewall, which
 # reads the matching hosts lists. Nothing is read from the environment.
@@ -18,8 +25,31 @@ done
 # agent's model host. A plain shell gets Claude's hosts.
 AGENT=claude
 [ "${1:-}" = gemini ] && AGENT=gemini
-echo "configs: base, $AGENT${CONFIGS[*]:+, ${CONFIGS[*]}}"
-sudo /usr/local/bin/init-firewall.sh "$AGENT" "${CONFIGS[@]}"
+if [ "$WITHOUT_CAPABILITIES" = 0 ]; then
+  echo "configs: base, $AGENT${CONFIGS[*]:+, ${CONFIGS[*]}}"
+  sudo /usr/local/bin/init-firewall.sh "$AGENT" "${CONFIGS[@]}"
+  # The two capabilities run.sh grants for the firewall (NET_ADMIN, NET_RAW) are handed to this non-root
+  # process by podman through the ambient set, and every child keeps them across fork and exec: on
+  # 2026-10-19 a Bash child of the agent read cap_net_admin and cap_net_raw effective and ambient in its own
+  # status, so the rules could have been altered from inside a session without sudo, the script's lock
+  # notwithstanding. The wall is built now, and nothing after this line needs a capability or a setuid
+  # binary (the relay, the clones, npm ci, the hooks, the agent: read through on 2026-10-19), so this
+  # script re-executes itself with the inheritable and ambient sets emptied and no-new-privs set: no
+  # process of the agent holds a capability, and none can gain one through sudo or a setuid file (sudo
+  # refuses under no-new-privs; the firewall's lock refuses it anyway). The bounding set is left as is:
+  # with the other two sets empty an exec by this user yields no capability, and dropping it would need
+  # CAP_SETPCAP, which this process does not hold.
+  exec setpriv --inh-caps=-all --ambient-caps=-all --no-new-privs -- "$0" --without-capabilities "$@"
+fi
+# The second execution refuses to go on if the drop did not take: better no session than one with the wall
+# in the agent's hands.
+caps=$(awk '$1 == "CapEff:" {print $2}' /proc/self/status)
+nnp=$(awk '$1 == "NoNewPrivs:" {print $2}' /proc/self/status)
+if [ "$caps" != 0000000000000000 ] || [ "$nnp" != 1 ]; then
+  echo "ERROR: the capabilities were not dropped (CapEff ${caps:-?}, NoNewPrivs ${nnp:-?}); refusing to start the agent with them" >&2
+  exit 1
+fi
+echo "capabilities: none in the agent's lineage (CapEff $caps, NoNewPrivs $nnp)"
 
 # The gateway shape (a `gateway` section in the mounted configuration): no token was minted and none is
 # here. A CA and a wildcard leaf for *.<domain> are made now, for this container only, into a private
@@ -127,14 +157,23 @@ cd /workspace
 
 # Dependencies: npm ci whenever the lockfile differs from the one last installed, which
 # also wipes node_modules, so a package pulled in by an old lockfile does not outlive it.
-# Lifecycle scripts are refused by the image's npm config (ignore-scripts); the lockfile
-# has no package that needs one (checked 2026-10-02, all 335 tests green without).
+# Lifecycle scripts are refused by the image's npm config (ignore-scripts) and, since
+# 2026-10-19, by the flag on the command too: npm reads a project .npmrc over the user's,
+# so one written into the workspace volume (which persists across restarts) with
+# ignore-scripts=false would have run every dependency's install script here, at the
+# next start, before the agent; the command-line flag outranks every file, and a workspace
+# carrying such a file does not start at all. The lockfile has no package that needs a
+# script (checked 2026-10-02, all 335 tests green without).
+if [ -e /workspace/.npmrc ]; then
+  echo "ERROR: /workspace/.npmrc exists; a project .npmrc outranks the image's npm config and is not the workspace's to carry (remove it, by hand or by a reviewed change, then start again)" >&2
+  exit 1
+fi
 if [ -f package-lock.json ]; then
   want=$(sha256sum package-lock.json | cut -d' ' -f1)
   have=$(cat node_modules/.cocoon-lockfile-sha 2>/dev/null || true)
   if [ "$want" != "$have" ]; then
     echo "npm ci (lockfile changed or first start)..."
-    npm ci --no-audit --no-fund
+    npm ci --no-audit --no-fund --ignore-scripts
     echo "$want" > node_modules/.cocoon-lockfile-sha
   fi
 fi

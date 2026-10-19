@@ -29,7 +29,19 @@ jobs:
         run: docker build -t cocoon-sandbox:ci sandbox/
       - name: start the entrypoint in it with the firewall's capabilities; its self-test decides
         run: docker run --rm --cap-add=NET_ADMIN --cap-add=NET_RAW cocoon-sandbox:ci true
-      - name: try a second run that must be refused
-        run: docker run --rm --cap-add=NET_ADMIN --cap-add=NET_RAW cocoon-sandbox:ci bash -c '! sudo /usr/local/bin/init-firewall.sh claude'
+      - name: a second run of the firewall script must be refused by its lock (the entrypoint bypassed, so sudo still works here)
+        run: docker run --rm --cap-add=NET_ADMIN --cap-add=NET_RAW --entrypoint bash cocoon-sandbox:ci -c 'sudo /usr/local/bin/init-firewall.sh claude && ! sudo /usr/local/bin/init-firewall.sh claude'
       - name: a run that must fail at the slash
         run: "! docker run --rm --cap-add=NET_ADMIN --cap-add=NET_RAW cocoon-sandbox:ci --config ../x true"
+      # The capability drop (entrypoint.sh, 2026-10-19), under podman as run.sh runs the container: podman hands a
+      # non-root user's added capabilities to the ambient set, docker does not, so under docker a "none left" test
+      # passes before the fix too. The control first: the entrypoint bypassed, the user must hold the two
+      # capabilities, or the test below proves nothing on this runner and the job says so by failing here.
+      - name: the image for podman, as run.sh runs it
+        run: podman pull docker-daemon:cocoon-sandbox:ci
+      - name: control, the capabilities are in the user's hands before the entrypoint drops them
+        run: podman run --rm --user 1000:1000 --cap-add NET_ADMIN --cap-add NET_RAW --entrypoint bash cocoon-sandbox:ci -c 'grep -E "^CapEff:[[:space:]]+0000000000003000$" /proc/self/status'
+      - name: after the entrypoint, no capability in the agent's lineage and no path to one; sudo refused
+        run: podman run --rm --user 1000:1000 --cap-add NET_ADMIN --cap-add NET_RAW cocoon-sandbox:ci bash -c 'grep -E "^CapEff:[[:space:]]+0000000000000000$" /proc/self/status && grep -E "^NoNewPrivs:[[:space:]]+1$" /proc/self/status && ! sudo -n /usr/local/bin/init-firewall.sh claude'
+      - name: a workspace carrying a project .npmrc is refused at start (it would outrank the image's ignore-scripts)
+        run: podman run --rm --user 1000:1000 --cap-add NET_ADMIN --cap-add NET_RAW --entrypoint bash cocoon-sandbox:ci -c 'touch /workspace/.npmrc && ! /usr/local/bin/entrypoint.sh true'
