@@ -11,7 +11,7 @@ for tool in "${TOOLS[@]}"; do
   command -v "$tool" >/dev/null || { echo "lint: '$tool' is required" >&2; exit 1; }
 done
 echo "lint: shellcheck $(shellcheck --version | sed -n 's/^version: //p')"
-scripts=(sandbox/*.sh host/*.sh hooks/*.sh tests/*.sh)
+scripts=(sandbox/*.sh sandbox/claude-code/hooks/*.sh host/*.sh hooks/*.sh tests/*.sh)
 fail=0
 shellcheck "${scripts[@]}" || fail=1
 # Our own classes, each with the date it was learned. This file is skipped: its patterns would match themselves.

@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/etc/claude-code/hooks/lint-bash.sh",
+            "timeout": 20,
+            "statusMessage": "shellcheck on the command (the image's managed hook)"
+          }
+        ]
+      }
+    ]
+  }
+}
