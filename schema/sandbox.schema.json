@@ -130,7 +130,7 @@
             "type": "string",
             "pattern": "^[a-z][a-z0-9-]*$"
           },
-          "description": "the subdomain names, the keys of the gateway's config/upstreams.json (github, git, npm, anthropic, arxiv, export-arxiv)"
+          "description": "the subdomain names, the keys of the gateway's config/upstreams.json (github, git, npm, anthropic, arxiv, export-arxiv) The launcher's two, github-public and codeload, are the gateway's own (its upstreams file) and are not listed here: the container's wall and tools never use them."
         },
         "ca": {
           "type": "string",

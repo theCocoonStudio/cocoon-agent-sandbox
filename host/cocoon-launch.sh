@@ -55,9 +55,11 @@ for tool in "${TOOLS[@]}"; do
 done
 
 DRY=0
+REINSTALL=0
 while [ $# -gt 0 ]; do   # the launcher's own options come first; the rest is the agent, its args and the profiles
   case "$1" in
     --dry) DRY=1; shift ;;
+    --reinstall) REINSTALL=1; shift ;;   # the fetched copy of this launcher over the installed one, after your review
     --config=*) CONFIG=${1#--config=}; CONFIG=${CONFIG/#\~/$HOME}; shift ;;
     --config) echo "launcher: use --config=<path> (with the =); --config <name> after -- is a profile for the sandbox" >&2; exit 1 ;;
     *) break ;;
@@ -71,13 +73,18 @@ done
 # 2026-10-29), so the launcher's two fetches, the commit lookup and the tarball, go through the
 # gateway as the role `box`: two upstreams with no credential on the gateway's side
 # (github-public, codeload), this host's own client certificate and bearer token
-# (gateway.host in the configuration, made by the gateway's certs.sh), the root the gateway's
-# certificate is verified against (gateway.ca), and the two subdomains pinned to the gateway's
-# address with --resolve, so the host needs no DNS entry and no hosts-file line for them. The
-# tarball is asked of codeload by the commit's sha directly, never by following a redirect, so
-# no header travels anywhere the configuration did not name. Without a gateway section the two
-# fetches go to api.github.com as before (a public repository; no credential; the download follows
-# GitHub's redirect to codeload). Nothing from the environment either way.
+# (gateway.host in the configuration, made by the gateway's certs.sh; the token travels in a
+# header read from a file under the run's temp dir, never on curl's command line where ps would
+# show it), the root the gateway's certificate is verified against (gateway.ca), and the two
+# subdomains pinned to the gateway's address with --resolve, so the host needs no DNS entry and
+# no hosts-file line for them. No redirect is followed on this route (no -L): the commit lookup
+# answers JSON and codeload answers the archive, asked by the commit's sha directly, so the header
+# goes to the two names the configuration pinned and nowhere else. The ref is percent-encoded in
+# the lookup's path, so a branch name with a slash is one path segment to the gateway's rule and
+# to GitHub alike. The gateway reads the sandbox repository only if its writable list names it
+# (the gateway's policy, a reviewed file there). Without a gateway section the two fetches go to
+# api.github.com as before (a public repository; no credential; the download follows GitHub's
+# redirect to codeload). Nothing from the environment either way.
 GW_DOMAIN=$(jq -r '.gateway.domain // empty' "$CONFIG")
 expand() { printf '%s' "${1/#\~/$HOME}"; }
 if [ -n "$GW_DOMAIN" ]; then
@@ -86,17 +93,20 @@ if [ -n "$GW_DOMAIN" ]; then
   GW_CERT=$(expand "$(jq -r '.gateway.host.cert // empty' "$CONFIG")")
   GW_KEY=$(expand "$(jq -r '.gateway.host.key // empty' "$CONFIG")")
   GW_TOKEN=$(expand "$(jq -r '.gateway.host.token // empty' "$CONFIG")")
-  for f in "$GW_CA" "$GW_CERT" "$GW_KEY" "$GW_TOKEN"; do
+  for name in gateway.ca gateway.host.cert gateway.host.key gateway.host.token; do
+    case "$name" in gateway.ca) f=$GW_CA ;; gateway.host.cert) f=$GW_CERT ;; gateway.host.key) f=$GW_KEY ;; *) f=$GW_TOKEN ;; esac
     if ! { [ -n "$f" ] && [ -r "$f" ]; }; then
-      echo "launcher: the gateway section needs gateway.ca and gateway.host.{cert,key,token}, each a readable file (the box role's, from the gateway's certs.sh); missing or unreadable: '$f'" >&2; exit 1
+      echo "launcher: the gateway section needs gateway.ca and gateway.host.{cert,key,token}, each a readable file (the box role's, from the gateway's certs.sh); $name is missing or unreadable ('$f')" >&2; exit 1
     fi
   done
   [[ "$GW_ADDRESS" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "launcher: gateway.address must be an IPv4 address" >&2; exit 1; }
   API=https://github-public.$GW_DOMAIN/repos
-  CURL=(curl -fsSL --cacert "$GW_CA" --cert "$GW_CERT" --key "$GW_KEY" -H "Proxy-Authorization: Bearer $(tr -d '[:space:]' < "$GW_TOKEN")"
-        --resolve "github-public.$GW_DOMAIN:443:$GW_ADDRESS" --resolve "codeload.$GW_DOMAIN:443:$GW_ADDRESS")
+  GATEWAY_ROUTE=1
   ROUTE="the gateway at $GW_ADDRESS as the role box (github-public.$GW_DOMAIN, codeload.$GW_DOMAIN)"
+  GW_HINT="; the gateway must serve github-public and codeload under a certificate naming them, hold the box role, and list the repository as writable (its README step 1 and its policy)"
 else
+  GATEWAY_ROUTE=0
+  GW_HINT=""
   CURL=(curl -fsSL)
   ROUTE="api.github.com directly (no gateway section in $CONFIG)"
 fi
@@ -136,6 +146,13 @@ fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "${tmp:?}"' EXIT
+if [ "$GATEWAY_ROUTE" = 1 ]; then
+  umask 077
+  printf 'Proxy-Authorization: Bearer %s\n' "$(tr -d '[:space:]' < "$GW_TOKEN")" > "$tmp/auth"
+  umask 022
+  CURL=(curl -fsS --cacert "$GW_CA" --cert "$GW_CERT" --key "$GW_KEY" -H "@$tmp/auth"
+        --resolve "github-public.$GW_DOMAIN:443:$GW_ADDRESS" --resolve "codeload.$GW_DOMAIN:443:$GW_ADDRESS")
+fi
 
 # One reviewed tarball: the commit a ref points at, for the record, then that commit's archive,
 # unpacked only as far as $3. Public repos: no credential; the download follows GitHub's redirect.
@@ -143,14 +160,16 @@ fetch() { # fetch <owner/repo> <ref> <path within the repo> -> prints <dir of th
   local slug=$1 ref=$2 path=$3 sha top
   # A 200 is not trusted to carry a commit: the sha is taken only if it is a 40-digit hex string, and
   # checked again after the pipe (an empty answer would make the tarball URL the default branch's).
-  sha=$("${CURL[@]}" -H "Accept: application/vnd.github+json" "$API/$slug/commits/$ref" \
+  local encoded
+  encoded=$(jq -rn --arg r "$ref" '$r | @uri')
+  sha=$("${CURL[@]}" -H "Accept: application/vnd.github+json" "$API/$slug/commits/$encoded" \
         | jq -r 'if (.sha | type == "string" and test("^[0-9a-f]{40}$")) then .sha else error("no commit sha in the response") end') \
-    || { echo "launcher: $slug@$ref: the commit lookup failed through $ROUTE; through a gateway it must serve github-public and codeload under a certificate naming them, and hold the box role (cocoon-gateway's README, step 1)" >&2; exit 1; }
+    || { echo "launcher: $slug@$ref: the commit lookup failed through $ROUTE$GW_HINT" >&2; exit 1; }
   [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "launcher: $slug@$ref: the commit lookup did not return a commit sha" >&2; exit 1; }
-  if [ -n "$GW_DOMAIN" ]; then
+  if [ "$GATEWAY_ROUTE" = 1 ]; then
     "${CURL[@]}" "https://codeload.$GW_DOMAIN/$slug/legacy.tar.gz/$sha" -o "$tmp/$sha.tgz"
   else
-    "${CURL[@]}" "$API/$slug/tarball/$sha" -o "$tmp/$sha.tgz"
+    "${CURL[@]}" -L "$API/$slug/tarball/$sha" -o "$tmp/$sha.tgz"
   fi
   top=$(tar -tzf "$tmp/$sha.tgz" | awk -F/ 'NR == 1 { print $1 }')   # <owner>-<repo>-<sha7>; awk reads to the end, so pipefail stays quiet
   case "$sha" in "${top##*-}"*) ;; *) echo "launcher: archive $top does not match commit $sha" >&2; exit 1 ;; esac
@@ -172,7 +191,14 @@ if grep -qF "$OLD_RUN_MARKER" "$dc/run.sh"; then
   echo "launcher: $sandbox_ref's run.sh predates the launcher (it mounts the host's clone); use a newer ref" >&2; exit 1
 fi
 if ! cmp -s "$host/cocoon-launch.sh" "$self"; then
-  echo "launcher: NOTE this installed launcher differs from $sandbox_ref's copy; reinstall it after reviewing the diff" >&2
+  if [ "$REINSTALL" = 1 ]; then
+    # the fetched copy over the installed one by a new inode (cp to a temp file, then mv), never a write
+    # into the running script's own file, which bash reads as it runs; the next run is the new copy
+    cp -- "$host/cocoon-launch.sh" "$self.new" && chmod -- 755 "$self.new" && mv -- "$self.new" "$self"
+    echo "launcher: reinstalled $self from $sandbox_repo@$sandbox_ref (fetched through $ROUTE); run it again" >&2
+    exit 0
+  fi
+  echo "launcher: NOTE this installed launcher differs from $sandbox_ref's copy; review the diff, then \`cocoon --reinstall\` takes the fetched copy (no direct download)" >&2
 fi
 
 echo "launcher: running $sandbox_repo@$sandbox_ref's sandbox with $config (fetched through $ROUTE)"
