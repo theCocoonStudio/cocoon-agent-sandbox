@@ -80,7 +80,7 @@ out=$(cd "$T" && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0
 [ "$out" = "/tmp/ca.crt
 https://github.com/" ] || { echo "FAIL: git under GIT_CONFIG_GLOBAL=/dev/null did not read the environment settings: $out"; fail=1; }
 # the Gemini system settings parse and list the tools that run without a prompt by the canonical names the 0.63.0 and
-# 0.64.0 bundles define (the owner, 2026-10-16; grep_search, whose legacy alias search_file_content the bundle maps to it,
+# 0.64.0 and 0.66.0 bundles define (the owner, 2026-10-16; grep_search, whose legacy alias search_file_content the bundle maps to it,
 # so the canonical name alone is listed; no save_memory exists: Gemini's review of #15, 2026-10-17)
 jq -e '.tools.allowed | (index("run_shell_command") != null) and (index("grep_search") != null) and (index("search_file_content") == null) and (index("save_memory") == null)' sandbox/gemini-settings.json >/dev/null 2>&1 || { echo "FAIL: sandbox/gemini-settings.json does not list run_shell_command and grep_search (and no legacy name) under tools.allowed, or does not parse"; fail=1; }
 for f in sandbox/*.sh host/*.sh hooks/*.sh tests/*.sh; do bash -n "$f" || { echo "FAIL: syntax: $f"; fail=1; }; done
