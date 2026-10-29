@@ -14,7 +14,15 @@ ENV TZ="$TZ"
 # idle compaction added in 2.1.299, a 200K+ token conversation idle about 54 minutes compacts itself unless `idleCompaction` is
 # false in the agent's settings; GitHub's advisory database lists none affecting 2.1.302; npm's latest tag is 2.1.302, published
 # 2026-10-16).
-ARG CLAUDE_CODE_VERSION=2.1.302
+# 2.1.312 on 2026-10-29 (changelog 2.1.303 to 2.1.312 read, 397 bullets; of note for this sandbox: 2.1.309 fixed sandboxed
+# Bash commands running the shell's startup files outside the sandbox before each command, sandboxed commands and auto-accepted
+# edits modifying the MCP config file passed with --mcp-config, the Bash permission check trusting a variable set by a command
+# whose redirect can fail to open, and permission checks not prompting for compound commands that cd before git when the cd is
+# wrapped; 2.1.307 fixed Linux sandbox write denies lifting when a background command outlived the session; 2.1.304 fixed file
+# read prompts not showing where a symbolic link leads; 2.1.311 compacts a conversation over 200K tokens instead of stopping;
+# 2.1.312 caps hooks at 24 running at a time per session; GitHub's advisory database lists none affecting 2.1.312, the five it
+# lists end below 2.1.179; npm's latest tag is 2.1.312, published 2026-10-27).
+ARG CLAUDE_CODE_VERSION=2.1.312
 # Pinned the same way; 0.62.0 audited 2026-10-02 (clean, Apache-2.0, one bundle, no runtime dependencies);
 # 0.63.0 on 2026-10-11 (cocoon-ai's PR #73 of 2026-10-10: release notes read there, fixes only; the one advisory in GitHub's database,
 # GHSA-wpqr-6v78-jr5g, affects versions below 0.39.1; npm's latest tag is 0.63.0, published 2026-10-06, 5 days old);
@@ -23,7 +31,15 @@ ARG CLAUDE_CODE_VERSION=2.1.302
 # no runtime dependencies; read in its bundle: the tool names, the admin policy tier, the system settings precedence and the
 # three shell gates (working directory outside the workspace, dangerous command, redirection) unchanged from 0.63.0; GitHub's
 # advisory database lists none affecting 0.64.0; npm's latest tag is 0.64.0, published 2026-10-13).
-ARG GEMINI_CLI_VERSION=0.64.0
+# 0.66.0 on 2026-10-29 (release notes of 0.65.0, published 2026-10-20, and 0.66.0, 2026-10-27, read: fixes; of note: read-only
+# workspace settings enforced in untrusted folders and false positives on untrusted command flags removed (0.65.0); interactive
+# credential and ssh prompts disabled in the git environment, the user-level ~/.gitconfig preserved in shell and git environments,
+# settings placeholders resolved after .env files, a binary update verified against PATH shadowing (0.66.0; auto-update is off
+# here). The tarball fetched through the gateway's npm upstream into its own directory, its sha512 equal to the registry's
+# integrity; Apache-2.0, one bundle, no runtime dependencies. Read in its bundle against the installed 0.64.0: every tool name
+# of tools.allowed, the legacy alias, the admin tier and the shell gates' strings appear in the same number of bundle files;
+# GitHub's advisory database lists none affecting 0.66.0; npm's latest tag is 0.66.0, published 2026-10-27).
+ARG GEMINI_CLI_VERSION=0.66.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates curl git gh jq less nano procps sudo \
@@ -77,7 +93,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 #                                       What refuses inside the sandbox is the wall, the gateway's policy and
 #                                       the rulesets, not this prompt; the web tools (web_fetch,
 #                                       google_web_search) are not listed and still prompt. The names are the
-#                                       canonical ones the 0.63.0 and 0.64.0 bundles define (grep_search; its legacy
+#                                       canonical ones the 0.63.0, 0.64.0 and 0.66.0 bundles define (grep_search; its legacy
 #                                       alias search_file_content is mapped to it by the bundle's TOOL_LEGACY_ALIASES,
 #                                       a live entry behind a comment that reads like an example, so listing the
 #                                       canonical name is enough; no save_memory exists: Gemini's review of #15,
