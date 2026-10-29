@@ -22,7 +22,8 @@
 # Why this file exists: run.sh builds the image from sandbox/ and runs on the host as
 # your user. When the host built from a working tree the agent writes, a restart executed
 # unreviewed scripts twice (2026-09-03 and 2026-10-02; the owner's private records). This
-# launcher downloads ONE reviewed thing from GitHub as a tarball over HTTPS, behind a
+# launcher downloads ONE reviewed thing from GitHub as a tarball over HTTPS (through the
+# gateway as the role `box` when the configuration has one, since 2026-10-29), behind a
 # ruleset with a required review: this library at the ref the host's configuration pins;
 # it unpacks only what it runs and runs THAT run.sh with the host's configuration. The
 # agent's workspace is a container volume the host never reads.
@@ -37,10 +38,10 @@ set -euo pipefail
 
 # --- Everything this script knows, in one place ---------------------------------------------
 CONFIG=~/.config/cocoon/sandbox.json  # the host's configuration, placed by hand; the only input (--config=<path> overrides)
-API=https://api.github.com/repos
+API=https://api.github.com/repos     # the direct route, used only when the configuration has no gateway section
 # Tools, and what each is for. run.sh adds openssl (the App JWT) and podman; it checks its own.
 TOOLS=(
-  curl   # the commit lookups and the tarball downloads
+  curl   # the commit lookups and the tarball downloads: through the gateway when one is configured (below), direct otherwise
   tar    # listing and unpacking the tarballs
   jq     # the commit shas and the sandbox ref out of JSON
 )
@@ -64,6 +65,41 @@ while [ $# -gt 0 ]; do   # the launcher's own options come first; the rest is th
 done
 
 [ -r "$CONFIG" ] || { echo "launcher: no configuration at $CONFIG; copy examples/cocoon-ai.json from the sandbox repository there and fill it in" >&2; exit 1; }
+
+# --- The route to GitHub: through the gateway when the configuration has one ------------------
+# A box behind its own firewall reaches the gateway's address alone (the owner's firewall box,
+# 2026-10-29), so the launcher's two fetches, the commit lookup and the tarball, go through the
+# gateway as the role `box`: two upstreams with no credential on the gateway's side
+# (github-public, codeload), this host's own client certificate and bearer token
+# (gateway.host in the configuration, made by the gateway's certs.sh), the root the gateway's
+# certificate is verified against (gateway.ca), and the two subdomains pinned to the gateway's
+# address with --resolve, so the host needs no DNS entry and no hosts-file line for them. The
+# tarball is asked of codeload by the commit's sha directly, never by following a redirect, so
+# no header travels anywhere the configuration did not name. Without a gateway section the two
+# fetches go to api.github.com as before (a public repository; no credential; the download follows
+# GitHub's redirect to codeload). Nothing from the environment either way.
+GW_DOMAIN=$(jq -r '.gateway.domain // empty' "$CONFIG")
+expand() { printf '%s' "${1/#\~/$HOME}"; }
+if [ -n "$GW_DOMAIN" ]; then
+  GW_ADDRESS=$(jq -r '.gateway.address // empty' "$CONFIG")
+  GW_CA=$(expand "$(jq -r '.gateway.ca // empty' "$CONFIG")")
+  GW_CERT=$(expand "$(jq -r '.gateway.host.cert // empty' "$CONFIG")")
+  GW_KEY=$(expand "$(jq -r '.gateway.host.key // empty' "$CONFIG")")
+  GW_TOKEN=$(expand "$(jq -r '.gateway.host.token // empty' "$CONFIG")")
+  for f in "$GW_CA" "$GW_CERT" "$GW_KEY" "$GW_TOKEN"; do
+    if ! { [ -n "$f" ] && [ -r "$f" ]; }; then
+      echo "launcher: the gateway section needs gateway.ca and gateway.host.{cert,key,token}, each a readable file (the box role's, from the gateway's certs.sh); missing or unreadable: '$f'" >&2; exit 1
+    fi
+  done
+  [[ "$GW_ADDRESS" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "launcher: gateway.address must be an IPv4 address" >&2; exit 1; }
+  API=https://github-public.$GW_DOMAIN/repos
+  CURL=(curl -fsSL --cacert "$GW_CA" --cert "$GW_CERT" --key "$GW_KEY" -H "Proxy-Authorization: Bearer $(tr -d '[:space:]' < "$GW_TOKEN")"
+        --resolve "github-public.$GW_DOMAIN:443:$GW_ADDRESS" --resolve "codeload.$GW_DOMAIN:443:$GW_ADDRESS")
+  ROUTE="the gateway at $GW_ADDRESS as the role box (github-public.$GW_DOMAIN, codeload.$GW_DOMAIN)"
+else
+  CURL=(curl -fsSL)
+  ROUTE="api.github.com directly (no gateway section in $CONFIG)"
+fi
 
 # --- The command on this host, when the configuration asks for it ----------------------------
 # `command.install: true` puts this launcher on the PATH as `cocoon`, so the install is one
@@ -107,10 +143,15 @@ fetch() { # fetch <owner/repo> <ref> <path within the repo> -> prints <dir of th
   local slug=$1 ref=$2 path=$3 sha top
   # A 200 is not trusted to carry a commit: the sha is taken only if it is a 40-digit hex string, and
   # checked again after the pipe (an empty answer would make the tarball URL the default branch's).
-  sha=$(curl -fsSL -H "Accept: application/vnd.github+json" "$API/$slug/commits/$ref" \
-        | jq -r 'if (.sha | type == "string" and test("^[0-9a-f]{40}$")) then .sha else error("no commit sha in the response") end')
+  sha=$("${CURL[@]}" -H "Accept: application/vnd.github+json" "$API/$slug/commits/$ref" \
+        | jq -r 'if (.sha | type == "string" and test("^[0-9a-f]{40}$")) then .sha else error("no commit sha in the response") end') \
+    || { echo "launcher: $slug@$ref: the commit lookup failed through $ROUTE; through a gateway it must serve github-public and codeload under a certificate naming them, and hold the box role (cocoon-gateway's README, step 1)" >&2; exit 1; }
   [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "launcher: $slug@$ref: the commit lookup did not return a commit sha" >&2; exit 1; }
-  curl -fsSL "$API/$slug/tarball/$sha" -o "$tmp/$sha.tgz"
+  if [ -n "$GW_DOMAIN" ]; then
+    "${CURL[@]}" "https://codeload.$GW_DOMAIN/$slug/legacy.tar.gz/$sha" -o "$tmp/$sha.tgz"
+  else
+    "${CURL[@]}" "$API/$slug/tarball/$sha" -o "$tmp/$sha.tgz"
+  fi
   top=$(tar -tzf "$tmp/$sha.tgz" | awk -F/ 'NR == 1 { print $1 }')   # <owner>-<repo>-<sha7>; awk reads to the end, so pipefail stays quiet
   case "$sha" in "${top##*-}"*) ;; *) echo "launcher: archive $top does not match commit $sha" >&2; exit 1 ;; esac
   tar -xzf "$tmp/$sha.tgz" -C "$tmp" "$top/$path"
@@ -134,7 +175,7 @@ if ! cmp -s "$host/cocoon-launch.sh" "$self"; then
   echo "launcher: NOTE this installed launcher differs from $sandbox_ref's copy; reinstall it after reviewing the diff" >&2
 fi
 
-echo "launcher: running $sandbox_repo@$sandbox_ref's sandbox with $config"
+echo "launcher: running $sandbox_repo@$sandbox_ref's sandbox with $config (fetched through $ROUTE)"
 if [ "$DRY" = 1 ]; then ls "$dc"; exec bash "$dc/run.sh" --dry "$config" "$@"; fi
 
 exec bash "$dc/run.sh" "$config" "$@"

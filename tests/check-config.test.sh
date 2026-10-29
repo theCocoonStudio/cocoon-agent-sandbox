@@ -44,6 +44,11 @@ jq '.agents.claude.gateway.extra = "x"' "$G" > "$T/gw6.json"; expect fail "$T/gw
 jq '.gateway.model = false' "$G" > "$T/gw7.json"; expect fail "$T/gw7.json" "unknown key in gateway: model"
 jq 'del(.agents.claude.gateway.model)' "$G" > "$T/gw8.json"; expect fail "$T/gw8.json" "missing in agents.claude.gateway: model"
 jq '.agents.claude.gateway.model = "yes"' "$G" > "$T/gw9.json"; expect fail "$T/gw9.json" "agents.claude.gateway.model must be true or false"
+# the launcher's box role (2026-10-29): gateway.host with its three files is required beside the gateway, exactly those keys
+jq 'del(.gateway.host)' "$G" > "$T/gw10.json"; expect fail "$T/gw10.json" "missing in gateway: host"
+jq 'del(.gateway.host.token)' "$G" > "$T/gw11.json"; expect fail "$T/gw11.json" "missing in gateway.host: token"
+jq '.gateway.host.extra = "x"' "$G" > "$T/gw12.json"; expect fail "$T/gw12.json" "unknown key in gateway.host: extra"
+jq '.gateway.host.cert = 1' "$G" > "$T/gw13.json"; expect fail "$T/gw13.json" "gateway.host.cert must be a string path"
 jq '.agents.gemini.gateway.model = true' "$G" > "$T/gw10.json"; expect fail "$T/gw10.json" "agents.gemini.gateway.model is true but gateway.upstreams has no gemini"
 jq '.gateway.upstreams -= ["anthropic"]' "$G" > "$T/gw11.json"; expect fail "$T/gw11.json" "agents.claude.gateway.model is true but gateway.upstreams has no anthropic"
 jq '.gateway.upstreams += ["gemini"] | .agents.gemini.gateway.model = true' "$G" > "$T/gw12.json"; expect pass "$T/gw12.json" ""

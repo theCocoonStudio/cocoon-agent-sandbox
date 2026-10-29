@@ -108,7 +108,8 @@
         "domain",
         "address",
         "upstreams",
-        "ca"
+        "ca",
+        "host"
       ],
       "description": "present: the wall allows the gateway's address alone and every tool reaches GitHub, npm and the research hosts through its subdomains; no App token is minted and none enters the container",
       "properties": {
@@ -134,6 +135,30 @@
         "ca": {
           "type": "string",
           "description": "host path of the private root's public half (root.crt from certs.sh); the container trusts it and nothing else for the gateway"
+        },
+        "host": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cert",
+            "key",
+            "token"
+          ],
+          "description": "the launcher's own identity at the gateway, the role box (2026-10-29): the host's two fetches of the sandbox repository go through the gateway with these, so a box whose firewall allows the gateway alone launches with no egress toggle; made by the gateway's certs.sh client <dir> box",
+          "properties": {
+            "cert": {
+              "type": "string",
+              "description": "the box role's client certificate, CN box"
+            },
+            "key": {
+              "type": "string",
+              "description": "the box role's private key, mode 600"
+            },
+            "token": {
+              "type": "string",
+              "description": "the box role's bearer token file, mode 600"
+            }
+          }
         }
       }
     }

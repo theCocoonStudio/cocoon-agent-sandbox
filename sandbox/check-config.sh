@@ -31,8 +31,15 @@ problems=$(jq -r '
      else "workspace must be an object" end),
     (if has("gateway") then
        (if (.gateway|type) != "object" then "gateway must be an object" else
-          (.gateway | keys_only(["domain","address","upstreams","ca"])[] | "unknown key in gateway: " + .),
-          (req(.gateway; ["domain","address","upstreams","ca"])[] | "missing in gateway: " + .),
+          (.gateway | keys_only(["domain","address","upstreams","ca","host"])[] | "unknown key in gateway: " + .),
+          (req(.gateway; ["domain","address","upstreams","ca","host"])[] | "missing in gateway: " + .),
+          (if (.gateway | has("host")) then
+             (if (.gateway.host|type) != "object" then "gateway.host must be an object (the launcher'"'"'s box role: cert, key, token)" else
+                (.gateway.host | keys_only(["cert","key","token"])[] | "unknown key in gateway.host: " + .),
+                (req(.gateway.host; ["cert","key","token"])[] | "missing in gateway.host: " + .),
+                (.gateway.host | to_entries[] | select((.value|type) != "string") | "gateway.host." + .key + " must be a string path")
+              end)
+           else empty end),
           (if (.gateway | has("domain")) and (((.gateway.domain|type) != "string") or ((.gateway.domain | test("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")) | not)) then "gateway.domain must be a hostname" else empty end),
           (if (.gateway | has("address")) and (((.gateway.address|type) != "string") or ((.gateway.address | test("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$")) | not)) then "gateway.address must be an IPv4 address" else empty end),
           (if (.gateway | has("upstreams")) and (((.gateway.upstreams|type) != "array") or ((.gateway.upstreams|length) == 0) or ([.gateway.upstreams[] | select((type != "string") or (test("^[a-z][a-z0-9-]*$") | not))] | length) > 0) then "gateway.upstreams must be a non-empty array of lowercase names" else empty end),
