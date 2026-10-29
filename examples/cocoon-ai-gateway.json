@@ -68,6 +68,11 @@
       "arxiv",
       "export-arxiv"
     ],
-    "ca": "~/.config/cocoon/gateway/root.crt"
+    "ca": "~/.config/cocoon/gateway/root.crt",
+    "host": {
+      "cert": "~/.config/cocoon/gateway/box.crt",
+      "key": "~/.config/cocoon/gateway/box.key",
+      "token": "~/.config/cocoon/gateway/box.token"
+    }
   }
 }
