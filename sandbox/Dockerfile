@@ -62,8 +62,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # the installs rule; merging this line is the decision the cocoon-ml README
 # reserves for Izzy (standard library until a GPU is needed).
 
-# Global npm installs go somewhere the non-root user owns.
-RUN mkdir -p /usr/local/share/npm-global && chown -R node:node /usr/local/share
+# Global npm installs go to a prefix of their own, root's: the agent runs the CLIs installed there and cannot
+# rewrite them. Until 2026-10-19 this line chowned all of /usr/local/share to the agent's user, so the CLIs'
+# files were the agent's, and so was the parent of /usr/local/share/cocoon (the firewall's host lists and the
+# relay, root's files inside a directory the agent could rename aside); the audit of that day found both.
+RUN mkdir -p /usr/local/share/npm-global
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=$PATH:/usr/local/share/npm-global/bin
 
@@ -103,16 +106,28 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # extensions are ignored and auto-approval may not edit there. The first `cocoon gemini`
 # asks once to trust /workspace; the answer lives in the gemini config volume.
 COPY gemini-settings.json /etc/gemini-cli/settings.json
-RUN chmod 0755 /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh \
+# Claude Code's managed settings (/etc/claude-code/managed-settings.json, the path its Linux build reads, root's),
+# the counterpart of Gemini's system settings: the Bash lint hook, run from a root-owned script here beside the
+# project's own hooks, so the lint binds from outside the working tree the agent writes (2026-10-19). The CLI runs
+# a missing hook script as a warning, not a refusal, so the script is in the image by construction.
+COPY claude-code/ /etc/claude-code/
+RUN chmod 0755 /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh /etc/claude-code/hooks/lint-bash.sh \
+  && chmod 0644 /etc/gemini-cli/settings.json /etc/claude-code/managed-settings.json \
   && echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall \
   && chmod 0440 /etc/sudoers.d/node-firewall
 
-USER node
+# The agent CLIs, pinned, installed as root so their files are not the agent's to rewrite (2026-10-19: the
+# tree was the agent's user's, so every prompt gate a CLI enforces was code the gated party owned; the files
+# are root's now, and a CLI the agent starts itself is still its own process, which the README's limits say).
+# The packages' own install scripts run here, at build time, as every image layer's commands do; the agent's
+# npm never runs one (below).
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
   @google/gemini-cli@${GEMINI_CLI_VERSION}
-# After the global installs: the agent's npm never runs a package's install scripts.
-# The repo's lockfile needs none (checked 2026-10-02); a dependency that does is a
-# deliberate, reviewed exception, not a default.
+
+USER node
+# The agent's npm never runs a package's install scripts: the user's npm config, and the flag on the
+# entrypoint's npm ci, which a project .npmrc cannot outrank. The repo's lockfile needs none (checked
+# 2026-10-02); a dependency that does is a deliberate, reviewed exception, not a default.
 RUN npm config set ignore-scripts true
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
