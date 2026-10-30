@@ -22,7 +22,15 @@ ENV TZ="$TZ"
 # read prompts not showing where a symbolic link leads; 2.1.311 compacts a conversation over 200K tokens instead of stopping;
 # 2.1.312 caps hooks at 24 running at a time per session; GitHub's advisory database lists none affecting 2.1.312, the five it
 # lists end below 2.1.179; npm's latest tag is 2.1.312, published 2026-10-27).
-ARG CLAUDE_CODE_VERSION=2.1.312
+# 2.1.314 on 2026-10-30 (2.1.313 was never published; the 2.1.314 section read, 119 bullets, 516 for 2.1.303 to 2.1.314 counted
+# off the headings; of note for this sandbox: `permissions.blockWritesOutsideWorkingDirectories` added, so Write, Edit and
+# NotebookEdit refuse paths outside the working directories in every mode (a managed-settings line to consider); sandbox
+# protections now apply to a worktree entered by `claude -p --resume` or `--continue`; hooks matching Bash now run on the
+# Monitor tool's shell commands and may block them; a settings file excluded with `--setting-sources` no longer supplies
+# auto-mode rules or saved consents; a call that auto mode, a deny rule or a PreToolUse hook blocked no longer reads as if
+# it ran; GitHub's advisory database lists none affecting 2.1.314, every range it lists ending below 2.1.179; npm's latest tag
+# is 2.1.314, published 2026-10-30).
+ARG CLAUDE_CODE_VERSION=2.1.314
 # Pinned the same way; 0.62.0 audited 2026-10-02 (clean, Apache-2.0, one bundle, no runtime dependencies);
 # 0.63.0 on 2026-10-11 (cocoon-ai's PR #73 of 2026-10-10: release notes read there, fixes only; the one advisory in GitHub's database,
 # GHSA-wpqr-6v78-jr5g, affects versions below 0.39.1; npm's latest tag is 0.63.0, published 2026-10-06, 5 days old);
